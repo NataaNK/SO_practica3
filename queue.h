@@ -2,14 +2,15 @@
 #define HEADER_FILE
 
 
-struct element {
+typedef struct element {
 	// Define the struct yourself
-	int param1;
-};
+	int *param1;
+}element;
 
 typedef struct queue {
 	// Define the struct yourself
 	int param1;
+	element **element;
 }queue;
 
 queue* queue_init (int size);
