@@ -28,6 +28,17 @@ typedef struct operacion{
     int num_cuenta;
     int cantidad;
 }operacion;
+
+int establecer_cuenta_y_cantidad(int fd, operacion op){
+    char buf[1];
+    int bytes;
+    while (bytes = read(fd, buf, 1) > 0){
+        // HACER AQUÍ QUE ESTABLEZCA LA OPERACIÓN CORRESPONDIENTE
+    }
+    if (bytes < 0){
+        perror("Error de lectura");
+    }
+}
  
 int main (int argc, const char * argv[] ) {
     //./bank <nombre fichero> <num cajeros> <num trabajadores> <max cuentas>
@@ -80,13 +91,13 @@ int main (int argc, const char * argv[] ) {
     int seguir_comprobando = 1;
     int contador = 0;
     char num_operaciones_char[3];
+    int num_operaciones;
     while ((bytes = read(fd, buf, 1)) > 0){ 
         // Si estamos al principio del fichero, leemos primero 
         // el número de operaciones que se realizarán hasta encontrar 
         // un salto de línea
         if (contador == 0){
             if(buf[0] == '\n'){
-                int num_operaciones;
                 num_operaciones = atoi(num_operaciones_char);
                 if (num_operaciones > 200){
                     printf("No se pueden superar las 200 operaciones máximas");
@@ -101,19 +112,24 @@ int main (int argc, const char * argv[] ) {
         }
         else{
             if (strcmp(buf[0], "C") == 0){
-            char buf_c[4];
-            if(read(fd, buf_c, 4) < 0){
-                perror("Error en la lectura del fichero");
+                char buf_c[4];
+                if(read(fd, buf_c, 4) < 0){
+                    perror("Error en la lectura del fichero");
+                }
+                if (strcmp(buf_c, "REAR") == 0){
+                    operacion op;
+                    op.num_operacion = num_operaciones;
+                }
+                else{
+                    printf("Operación incorrecta\n");
+                    exit(-1);
+                }
             }
-            if (strcmp(buf_c, "REAR") == 0){
-                operacion op;
-                op.num_operacion = num_operaciones;
-            }
-        }
         }
 
 
         // ********************************CÓDIGO DEL MYENV************************************
+        /*
         // Buscamos coincidencia en la línea
         if (seguir_comprobando == 1){
 
@@ -162,6 +178,7 @@ int main (int argc, const char * argv[] ) {
             }
         }
     }
+    */
     
     if (bytes < 0){
         perror("Error: No se ha podido leer el fichero de entrada");
@@ -169,4 +186,5 @@ int main (int argc, const char * argv[] ) {
     }
 
     return 0;
+}
 }
