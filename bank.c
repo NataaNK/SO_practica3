@@ -12,6 +12,9 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
+// Constantes
+#define MAX_OPERACIONES 200
+#define MAX_DIGITOS_CANTIDAD_TRANSACCION 10
 
 
 /**
@@ -28,143 +31,19 @@ typedef struct operacion{
     int num_cuenta1;
     int num_cuenta2;
     int cantidad;
-}operacion;
+}operacion_t;
 
-int introducir_en_list_ops(int fd, operacion op, operacion *list_operaciones, 
-                           int contador, int max_cuentas){
-    // Establecemosel número de operación
-    op.num_operacion = contador;
-    // Buscamos el número de cuenta y cantidad                        
-    char buf[1];
-    int bytes;
-    int read_arg1 = 0;
-    int read_arg2 = 0;
-    int read_arg3 = 0;
-    char cuenta1_char[sizeof(max_cuentas)/sizeof(int)] = "";
-    char cuenta2_char[sizeof(max_cuentas)/sizeof(int)] = "";
-    // MALLOC??? <------------------------------------------------------------
-    char cantidad_char[10] = ""; 
-    int cuenta1 = -1; 
-    int cuenta2 = -1;
-    int cantidad = -1;
-    int fin_de_linea = 0;
-    while ((fin_de_linea == 0) && (bytes = read(fd, buf, 1) > 0) 
-            && (strncmp(buf, "\n", 1) != 0)){
-        if ((strncmp(buf, " ", 1) != 0) && (read_arg1 == 0)){
-            read_arg1 = 1;
-            strncat(cuenta1_char, buf, 1);
-            while ((bytes = read(fd, buf, 1) > 0) && (strncmp(buf, " ", 1) != 0)
-                    && (strncmp(buf, "\n", 1) != 0)){
-                strncat(cuenta1_char, buf, 1);
-            }
-            cuenta1 = atoi(cuenta1_char);
-            op.num_cuenta1 = cuenta1;
-            if (strncmp(buf, "\n", 1) == 0){
-                fin_de_linea = 1;
-            }      
-        }
-        else if ((strncmp(buf, " ", 1) != 0) && (read_arg2 == 0)){
-            read_arg2 = 1;
-            if (strncmp(op.operacion, "TRASPASAR", 9) != 0){
-                strncat(cantidad_char, buf, 1);
-                while ((bytes = read(fd, buf, 1) > 0) && (strncmp(buf, " ", 1) != 0)
-                        && (strncmp(buf, "\n", 1) != 0)){
-                    strncat(cantidad_char, buf, 1);
-                }
-                cantidad = atoi(cantidad_char);
-                op.cantidad = cantidad;
-                if (strncmp(buf, "\n", 1) == 0){
-                    fin_de_linea = 1;
-                }
-                
-            }
-            else if(strncmp(op.operacion, "CREAR", 5) == 0 || 
-                    strncmp(op.operacion, "SALDO", 5) == 0 ){
-                printf("Error: número máximo de argumentos excedido\n");
-                close(fd);
-                exit(-1);
-            }
-            else{
-                // Si es la operación TRASPASAR buscamos cuenta2
-                strncat(cuenta2_char, buf, 1);
-                while ((bytes = read(fd, buf, 1) > 0) && (strncmp(buf, " ", 1) != 0)
-                        && (strncmp(buf, "\n", 1) != 0)){
-                    strncat(cuenta2_char, buf, 1);
-                }
-                cuenta2 = atoi(cuenta2_char);
-                op.num_cuenta2 = cuenta2;
-                if (strncmp(buf, "\n", 1) == 0){
-                    fin_de_linea = 1;
-                }
-            }
-        }
-        // Si la operación es TRASPASAR buscamos la cantidad, si otra operación entra en el if
-        // es que tiene una operación de más
-        else if((strncmp(buf, " ", 1) != 0) && (read_arg3 == 0)){
-            read_arg3 = 1;
-            if (strncmp(op.operacion, "TRASPASAR", 9) == 0){
-                strncat(cantidad_char, buf, 1);
-                while ((bytes = read(fd, buf, 1) > 0) && (strncmp(buf, " ", 1) != 0)
-                        && (strncmp(buf, "\n", 1) != 0)){
-                    strncat(cantidad_char, buf, 1);
-                }
-                cantidad = atoi(cantidad_char);
-                op.cantidad = cantidad;
-                if (strncmp(buf, "\n", 1) == 0){
-                    fin_de_linea = 1;
-                }
-                
-            }
-            else{
-                printf("Error: número máximo de argumentos excedido\n");
-                close(fd);
-                exit(-1);
-            }
-        }
-    }
+typedef struct insertar_elem{
+    char *operacion_str;
+    operacion_t operacion;
+    int digit_max_cuentas;
+}insertar_elem_t;
 
-    if (bytes < 0){
-        perror("Error de lectura");
-        close(fd);
-        exit(-1);
-    }
-    if (cuenta1 == -1){
-        // <----------------------------------------------------------------¿BLOQUEAR TODO?
-        printf("Error: Falta indicar la cuenta\n");
-        close(fd);
-        exit(-1);
-    }
-    if (cuenta2 == -1 && strncmp(op.operacion, "TRASPASAR", 9) == 0){
-        printf("Error: Falta indicar la cuenta destinataria\n");
-        close(fd);
-        exit(-1);
-    }
-    if ((cantidad == -1 && strncmp(op.operacion, "CREAR", 5) != 0) &&
-        (cantidad == -1 && strncmp(op.operacion, "SALDO", 5) != 0) ){
-        // <----------------------------------------------------------------¿BLOQUEAR TODO?
-        printf("Error: Falta indicar la cantidad\n");
-        close(fd);
-        exit(-1);
-    }
-    // En caso de ser la operación CREAR, comprobamos que no exista ya
-    // dicha cuenta
-    else if(cantidad == -1 && strncmp(op.operacion, "CREAR", 5) == 0){
-        int j;
-        for (j=0;j<contador;j++){
-            if (list_operaciones[j].operacion == op.operacion
-                && list_operaciones[j].num_cuenta1 == op.num_cuenta1){
-                // Quizás hay que bloquear únicamente los HILOS <---------------------------
-                printf("Error: La cuenta ya existe\n");
-                close(fd);
-                exit(-1);
-            }
-        }   
-    
-    // Añadimos la operación a la lista de operaciones
-    list_operaciones[contador - 1] = op;
-    return 0;
-    }
-}
+// Prototipos
+operacion_t crear_elemento_operacion(char *operacion_str, operacion_t op, int digit_max_cuentas);
+
+int insertar_elemento_en_cola(insertar_elem_t *op);
+
  
 int main (int argc, const char * argv[] ) {
     //./bank <nombre fichero> <num cajeros> <num trabajadores> <max cuentas>
@@ -185,35 +64,33 @@ int main (int argc, const char * argv[] ) {
     
     // El segundo argumento nos especifica el número de cajeros (hilos productores)
     int num_cajeros;
-    if (num_cajeros = atoi(argv[2]) <= 0){
+    if ((num_cajeros = atoi(argv[2])) <= 0){
         printf("Error: El número de cajeros debe ser mayor que 0\n");
         return -1;
     }
 
     // El tercer argumento representa el número de trabajadores del banco (hilos consumidores)
     int num_empleados;
-    if (num_empleados = atoi(argv[3]) <= 0){
+    if ((num_empleados = atoi(argv[3])) <= 0){
         printf("Error: El número de empleados debe ser mayor que 0\n");
         return -1;
     }
 
     // El cuarto argumento representa el número máximo de cuentas que puede haber en el banco
     int max_cuentas;
-    if (max_cuentas = atoi(argv[4]) <= 0){
+    if ((max_cuentas = atoi(argv[4])) <= 0){
         printf("Error: El número máximo de cuentas debe ser mayor que 0\n");
         return -1;
     }
+    int digitos_max_cuentas = strlen(argv[4]);
     
     // El quinto argumento representa el tamaño de la cola circular
     // sobre el que se irán almacenando las operaciones
     int tam_buff;
-    if (tam_buff = atoi(argv[5]) <= 0){
+    if ((tam_buff = atoi(argv[5])) <= 0){
         printf("Error: El tamaño del buffer debe ser mayor que 0\n");
         return -1;
     }
-    
-    queue *cola;
-    //cola = queue_init(tam_buff);
 
     // Leemos el fichero de entrada
     int bytes;
@@ -221,30 +98,33 @@ int main (int argc, const char * argv[] ) {
     int vacio = 1;
     char buf[1];
     int contador = 0;
-    // Hay que inicializar el contador de operaciones (char) a ""
-    // para que, al transformarlo a int, lo detecte correctamente
     char num_operaciones_char[3] = "";
     int num_operaciones;
-    // Estableceremos el espacio de la lista de operaciones al leer la
-    // cantidad en el fichero
-    operacion *list_client_ops;
+    int primer_char = 1;
+    // Lista que contiene las operaciones en formato string
+    char **list_client_ops;
 
     while ((bytes = read(fd, buf, 1)) > 0){ 
         vacio = 0;
-        // printf("Leyendo: %c\n", buf[0]);
         // Si estamos al principio del fichero, leemos primero 
-        // el número de operaciones que se realizarán hasta encontrar 
-        // un salto de línea
+        // el número de operaciones que se realizarán 
         if (contador == 0){
             if(buf[0] == '\n'){
                 num_operaciones = atoi(num_operaciones_char);
-                // Creamos el array en el que se almacenarán las operaciones que 
-                // el banco tiene que hacer (el tamaño del array es el número de operaciones)
-                list_client_ops = (operacion*)malloc(sizeof(operacion)*num_operaciones);
-                if (num_operaciones > 200){
-                    printf("Error: No se pueden superar las 200 operaciones máximas");
+                
+                if (num_operaciones > MAX_OPERACIONES){
+                    printf("Error: No se pueden superar las 200 operaciones máximas\n");
                     close(fd);
                     exit(-1);
+                }
+                // Creamos el array en el que se almacenará las operaciones
+                // (el tamaño del array es el número de operaciones por el tamaño máximo que puede 
+                // tener un string de operación = TRASPASAR+''+digitos_max_cuentas+''+digitos_max_cuentas+
+                // ''+int_de_10_digitos)
+                int tamaño_maximo_operacion_str = 9+1+(digitos_max_cuentas*2)+2+10;
+                list_client_ops = (char**)malloc(sizeof(char*)*num_operaciones);
+                for(int i=0; i<num_operaciones; i++){
+                    list_client_ops[i] = (char*)malloc(tamaño_maximo_operacion_str*sizeof(char));
                 }
                 contador++;
             }
@@ -253,184 +133,240 @@ int main (int argc, const char * argv[] ) {
             }
         }
         else{
-            if (strncmp(buf, "C", 1) == 0){
-                char buf_c[4];
-                if(read(fd, buf_c, 4) < 0){
-                    perror("Error en la lectura del fichero");
-                    close(fd);
-                    exit(-1);
-                }
-                if (strncmp(buf_c, "REAR", 4) == 0){
-                    // Añadimos la nueva operación y buscamos con sus argumentos
-                    operacion op;
-                    strcpy(op.operacion, "CREAR");
-                    introducir_en_list_ops(fd, op, list_client_ops, contador, max_cuentas);
-                    // Comprobamos que no exista ya dicha cuenta
-                    contador++;
+            if(strncmp(buf, "\n", 1) != 0){
+                // Añadimos la línea (una operación) a la lista
+                if (primer_char == 1){
+                    primer_char = 0;
+                    strncpy(list_client_ops[contador-1], buf, 1); 
                 }
                 else{
-                    // Quizás hay que bloquear únicamente los HILOS <---------------------------
-                    printf("Error: Operación incorrecta\n");
-                    close(fd);
-                    exit(-1);
+                    strncat(list_client_ops[contador-1], buf, 1); 
                 }
             }
-            else if (strncmp(buf, "I", 1) == 0){
-                char buf_i[7];
-                if(read(fd, buf_i, 7) < 0){
-                    perror("Error en la lectura del fichero");
-                    close(fd);
-                    exit(-1);
-                }
-                if (strncmp(buf_i, "NGRESAR", 7) == 0){
-                    // Ahora, hay que buscar el número de cuenta e introducir la cantidad 
-                    operacion op; 
-                    strcpy(op.operacion, "INGRESAR");
-                    introducir_en_list_ops(fd, op, list_client_ops, contador, max_cuentas);
-                    // Comprobamos que no exista ya dicha cuenta
-                    contador++;
-                }
-                else{
-                    // Quizás hay que bloquear únicamente los HILOS <---------------------------
-                    printf("Error: Operación incorrecta\n");
-                    close(fd);
-                    exit(-1);
-                }
-            }
-            else if (strncmp(buf, "T", 1) == 0){
-                char buf_t[8];
-                if(read(fd, buf_t, 8) < 0){
-                    perror("Error en la lectura del fichero");
-                    close(fd);
-                    exit(-1);
-                }
-                if (strncmp(buf_t, "RASPASAR", 8) == 0){
-                    // Ahora, hay que buscar el número de cuenta e introducir la cantidad 
-                    operacion op; 
-                    strcpy(op.operacion, "TRASPASAR");
-                    introducir_en_list_ops(fd, op, list_client_ops, contador, max_cuentas);
-                    // Comprobamos que no exista ya dicha cuenta
-                    contador++;
-                }
-                else{
-                    // Quizás hay que bloquear únicamente los HILOS <---------------------------
-                    printf("Error: Operación incorrecta\n");
-                    close(fd);
-                    exit(-1);
-                }
-            }
-            else if (strncmp(buf, "R", 1) == 0){
-                char buf_r[6];
-                if(read(fd, buf_r, 6) < 0){
-                    perror("Error en la lectura del fichero");
-                    close(fd);
-                    exit(-1);
-                }
-                if (strncmp(buf_r, "ETIRAR", 6) == 0){
-                    // Ahora, hay que buscar el número de cuenta e introducir la cantidad 
-                    operacion op; 
-                    strcpy(op.operacion, "RETIRAR");
-                    introducir_en_list_ops(fd, op, list_client_ops, contador, max_cuentas);
-                    // Comprobamos que no exista ya dicha cuenta
-                    contador++;
-                }
-                else{
-                    // Quizás hay que bloquear únicamente los HILOS <---------------------------
-                    printf("Error: Operación incorrecta\n");
-                    close(fd);
-                    exit(-1);
-                }
-            }
-            else if (strncmp(buf, "S", 1) == 0){
-                char buf_s[4];
-                if(read(fd, buf_s, 4) < 0){
-                    perror("Error en la lectura del fichero");
-                    close(fd);
-                    exit(-1);
-                }
-                if (strncmp(buf_s, "ALDO", 4) == 0){
-                    // Ahora, hay que buscar el número de cuenta e introducir la cantidad 
-                    operacion op; 
-                    strcpy(op.operacion, "SALDO");
-                    introducir_en_list_ops(fd, op, list_client_ops, contador, max_cuentas);
-                    // Comprobamos que no exista ya dicha cuenta
-                    contador++;
-                }
-                else{
-                    // Quizás hay que bloquear únicamente los HILOS <---------------------------
-                    printf("Error: Operación incorrecta\n");
-                    close(fd);
-                    exit(-1);
-                }
+            else{
+                contador++;
             }
         }
     }
 
     if (bytes < 0){
-        perror("Error: No se ha podido leer el fichero de entrada");
+        perror("Error: No se ha podido leer el fichero de entrada\n");
         close(fd);
         exit(-1);
     }
     
     if (vacio == 1){
-        perror("Error: Fichero de entrada vacío");
+        printf("Error: Fichero de entrada vacío\n");
         close(fd);
         exit(-1);
     }
 
-    return 0;
+    // En ningún caso puede haber menos o más operaciones que las indicadas
+    // en el fichero
+    if ((contador-1) != num_operaciones){
+        printf("Error: En el fichero de entrada no hay el número de operaciones indicado\n");
+        close(fd);
+        exit(-1);
+    }
 
-        // ********************************CÓDIGO DEL MYENV************************************
-        /*
-        // Buscamos coincidencia en la línea
-        if (seguir_comprobando == 1){
-
-            if (buf[0] == variable[i]){
-                i++;
-                seguir_comprobando = 1;
-            }
-            else{
-                i = 0;
-                seguir_comprobando = 0;
-            }
-        }
-        // Si hemos llegado al final de la línea, seguimos buscando
-        // en la siguiente
-        else if (buf[0] == '\n'){
-            seguir_comprobando = 1;
-        }
-        // Como ya sabemos que no hay coincidencia en esa línea,
-        // la pasamos sin comprobar hasta acabar la línea
-        else{
-            seguir_comprobando = 0;
-        }        
-
-        // Si han coincidido todas las letras querrá decir que hemos
-        // encontrado la variable
-        if (i == len){
-            seguir_comprobando = 0;
-            // Ya hemos acabado de escribir las entradas
-            if (buf[0] == '\n'){
-                // Añadimos el salto de línea
-                strcat(buf_escritura, "\n");
-                escrito = 1;
-            }
-            else{
-                // En la primera iteración añadimos el nombre de la variable
-                // y el '='
-                if (primera_iteracion == 1){
-                    primera_iteracion = 0; 
-                    strcpy(buf_escritura, variable);
-                }
-                // En las siguientes añadimos el primer caracter del buf 
-                // al destino, más un carácter nulo de terminación con 'strncat'
-                else{
-                    strncat(buf_escritura, buf, 1);
-                }
-            }
+    // Una vez leída la entrada, establecemos la cola circular que compartiran
+    // los hilos
+    //queue *cola;
+    //cola = queue_init(tam_buff);
+    // Creamos el cajero (hilo productor) y le pasamos una operación,
+    // deben leer la operación indicada en client_numop
+    int client_numop=1;
+    pthread_t th[num_cajeros];
+    while (client_numop <= num_operaciones){
+        int i;
+        for(i=0; i<num_cajeros; i++){
+            printf("Creando hilo %d\n", i);
+            operacion_t op;
+            // Establecemos el número de operación correspondiente
+            op.num_operacion = client_numop;
+            insertar_elem_t op_y_numop;
+            op_y_numop.operacion_str = list_client_ops[client_numop - 1];
+            op_y_numop.operacion = op;
+            op_y_numop.digit_max_cuentas = digitos_max_cuentas;
+            client_numop++;
+            pthread_create(&th[i], NULL, insertar_elemento_en_cola, &op_y_numop);
+            pthread_join(th[i], NULL);
+        }      
+        int j;
+        for(j=0; j<num_cajeros; j++){
+            printf("Join hilo %d\n", j);
+            pthread_join(th[j], NULL);
         }
     }
-    */
-    
-    
+    // Tras el procesamiento de las operaciones liberamos la memoria 
+    // reservada con malloc
+    free(list_client_ops);
+
+    return 0;
+}
+
+int insertar_elemento_en_cola(insertar_elem_t *op){
+    printf("entro\n");
+    printf("hilo: %ld\n", pthread_self());
+    crear_elemento_operacion(op->operacion_str, op->operacion, op->digit_max_cuentas);
+    // Lo escribimos en la cola, sin que el resto de hilos puedan escribir y en ordern
+
+    /*  // En caso de ser la operación CREAR, comprobamos que no exista ya
+    // dicha cuenta
+    else if(cantidad == -1 && strncmp(op.operacion, "CREAR", 5) == 0){
+        int j;
+        for (j=0;j<client_numop;j++){
+            if (list_operaciones[j].operacion == op.operacion
+                && list_operaciones[j].num_cuenta1 == op.num_cuenta1){
+                // Quizás hay que bloquear únicamente los HILOS <---------------------------
+                printf("Error: La cuenta ya existe\n");
+                close(fd);
+                exit(-1);
+            }
+        }   
+    }*/
+    sleep(1);
+    return 0;
+}
+
+operacion_t crear_elemento_operacion(char *operacion_str, operacion_t op, int digit_max_cuentas){
+    // Buscamos el número de cuenta y cantidad                        
+    int read_arg1 = 0;
+    int read_arg2 = 0;
+    int read_arg3 = 0;
+    char cuenta1_char[digit_max_cuentas];
+    char cuenta2_char[digit_max_cuentas];
+    char cantidad_char[MAX_DIGITOS_CANTIDAD_TRANSACCION]; 
+    int cuenta1 = -1; 
+    int cuenta2 = -1;
+    int cantidad = -1;
+    int i;
+    int longitud = strlen(operacion_str);
+    int digitos = 1;
+    // Identificamos la operación
+    if (strncmp(operacion_str, "CREAR ", 6) == 0){
+        // Añadimos el tipo de operación
+        strcpy(op.operacion, "CREAR");
+        // Actualizamos el puntero de lectura del string
+        i = 6;
+    }
+    else if (strncmp(operacion_str, "INGRESAR ", 9) == 0){
+        strcpy(op.operacion, "INGRESAR");
+        i = 9;
+    }
+    else if (strncmp(operacion_str, "TRASPASAR ", 10) == 0){
+        strcpy(op.operacion, "TRASPASAR");
+        i = 10;
+    }
+    else if (strncmp(operacion_str, "RETIRAR ", 8) == 0){
+        strcpy(op.operacion, "RETIRAR");
+        i = 8;
+    }
+    else if (strncmp(operacion_str, "SALDO ", 6) == 0){
+        strcpy(op.operacion, "SALDO");
+        i = 6;
+    }
+    else{
+        printf("Error: Operación incorrecta\n");
+        exit(-1);
+    }
+
+    int n = 0;
+    // Buscamos los argumentos
+    while (i<longitud){
+        if ((read_arg1 == 1) || (read_arg2 == 1)){
+            // Reiniciamos la posición del char dentro del argumento
+            n = 0;
+        }
+        printf("analizando caracter: %c\n", operacion_str[i]);
+        printf("nose que poner: %d\n", operacion_str[i] != ' ');
+        if ((operacion_str[i] != ' ') && (read_arg1 == 0)){
+            cuenta1_char[n] = operacion_str[i];
+            n++;
+            printf("cuenta1_char: %s\n", cuenta1_char);
+            if ((i+1 == longitud) || (operacion_str[i+1] == ' ')){
+                read_arg1 = 1;
+                cuenta1 = atoi(cuenta1_char);
+                op.num_cuenta1 = cuenta1;
+            }
+        }
+        else if((operacion_str[i] != ' ') && (read_arg2 == 0)){
+            if (strncmp(op.operacion, "TRASPASAR", 9) != 0){
+                if (digitos <= MAX_DIGITOS_CANTIDAD_TRANSACCION){
+                    cantidad_char[n] = operacion_str[i];
+                    n++;
+                }
+                else{
+                    printf("Error: No se admite esa cantidad, debe tener 10 dígitos como máximo");
+                    exit(-1);
+                }
+                digitos++;
+                if ((i+1 == longitud) || (operacion_str[i+1] == ' ')){
+                    read_arg2 = 1;
+                    cantidad = atoi(cantidad_char);
+                    op.cantidad = cantidad;
+                }
+            }
+            else if(strncmp(op.operacion, "CREAR", 5) == 0 || 
+                    strncmp(op.operacion, "SALDO", 5) == 0 ){
+
+                printf("Error: Número máximo de argumentos excedido\n");
+                exit(-1);
+            }
+            else{
+                // Si es la operación TRASPASAR buscamos cuenta2
+                cuenta2_char[n] = operacion_str[i];
+                n++;
+                if ((i+1 == longitud) || (operacion_str[i+1] == ' ')){
+                    read_arg2 = 1;
+                    cuenta2 = atoi(cuenta2_char);
+                    op.num_cuenta2 = cuenta2;
+                }
+            }
+        }
+        // Si la operación es TRASPASAR buscamos la cantidad, si otra operación entra en el if
+        // es que tiene una operación de más
+        else if((operacion_str[i] != ' ') && (read_arg3 == 0)){
+            if (strncmp(op.operacion, "TRASPASAR", 9) == 0){
+                if (digitos <= MAX_DIGITOS_CANTIDAD_TRANSACCION){
+                    cantidad_char[n] = operacion_str[i];
+                    n++;
+                }
+                else{
+                    printf("Error: No se admite esa cantidad, debe tener 10 dígitos como máximo");
+                    exit(-1);
+                }     
+                digitos++;
+                if((i+1 == longitud) || (operacion_str[i+1] == ' ')){
+                    read_arg3 = 1;
+                    cantidad = atoi(cantidad_char);
+                    op.cantidad = cantidad;
+                }
+            }
+            else{
+                printf("Error: Número máximo de argumentos excedido\n");
+                exit(-1);
+            }
+        }
+        i++;
+    }
+
+
+    if (cuenta1 == -1){
+        printf("Error: Falta indicar la cuenta\n");
+        exit(-1);
+    }
+    if (cuenta2 == -1 && strncmp(op.operacion, "TRASPASAR", 9) == 0){
+        printf("Error: Falta indicar la cuenta destinataria\n");
+        exit(-1);
+    }
+    if ((cantidad == -1 && strncmp(op.operacion, "CREAR", 5) != 0) &&
+        (cantidad == -1 && strncmp(op.operacion, "SALDO", 5) != 0) ){
+        printf("Error: Falta indicar la cantidad\n");
+        exit(-1);
+    }
+
+    printf("Terminando hilo. Operación establecida: %s. Num cuenta:%d\n", op.operacion, op.num_cuenta1);
+    printf("Saldo de la cuenta: %d\n", op.cantidad);
+    return op;
 }
