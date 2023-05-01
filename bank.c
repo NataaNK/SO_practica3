@@ -11,10 +11,12 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <math.h>
 
 // Constantes:
 #define MAX_OPERACIONES 200
 #define MAX_DIGITOS_CANTIDAD_TRANSACCION 10
+#define MAX_CANTIDAD_TRANSACCION pow(10, MAX_DIGITOS_CANTIDAD_TRANSACCION)
 
 // Variables globales:
 // Lista que contiene las operaciones en formato string
@@ -41,10 +43,10 @@ typedef struct crear_elem{
     int read_arg1;
     int read_arg2;
     int read_arg3;
-    int max_cuentas;
+    int digitos_max_cuentas;
     char *cuenta1_char;
     char *cuenta2_char;
-    char cantidad_char[MAX_DIGITOS_CANTIDAD_TRANSACCION]; 
+    char cantidad_char[MAX_DIGITOS_CANTIDAD_TRANSACCION+1]; 
     int cuenta1; 
     int cuenta2;
     int cantidad;
@@ -61,13 +63,20 @@ typedef struct insertar_elem{
     int digitos_max_cuentas;
 }insertar_elem_t;
 
+typedef struct ejecutar_op{
+    int bank_numop;
+    int max_cuentas;
+}ejecutar_op_t;
+
 // Prototipos:
 operacion_t crear_elemento_operacion(char *operacion_str, operacion_t op,   
-                                    int read_arg1, int read_arg2, int read_arg3,
-                                    int max_cuentas, char *cuenta1_char, char *cuenta2_char, 
-                                    char *cantidad_char, int cuenta1, int cuenta2, 
-                                    int cantidad, int i, int longitud, int n, int cambio);
+                                    int read_arg1, int read_arg2, int read_arg3, 
+                                    int digitos_max_cuentas, char *cuenta1_char, 
+                                    char *cuenta2_char, char *cantidad_char, int cuenta1, 
+                                    int cuenta2, int cantidad, int i, int longitud, 
+                                    int n, int cambio);
 void insertar_elemento_en_cola(insertar_elem_t *op);
+void ejecutar_operacion_de_cola(ejecutar_op_t *op);
 
 
  
@@ -109,6 +118,12 @@ int main (int argc, const char * argv[] ) {
         return -1;
     }
     int digitos_max_cuentas = strlen(argv[4]);
+    saldo_cuenta = (int*)malloc(sizeof(int)*max_cuentas);
+    // Inicializamos las cuentas inexistentes a -1 para futuras comprobaciones
+    int i;
+    for (i = 0; i < max_cuentas; i++){
+        saldo_cuenta[i] = -1;
+    }
     
     // El quinto argumento representa el tamaño de la cola circular
     // sobre el que se irán almacenando las operaciones
@@ -195,31 +210,33 @@ int main (int argc, const char * argv[] ) {
 
     
     
-    // Creamos el cajero (hilo productor) y le pasamos una operación,
-    // deben leer la operación indicada en client_numop
-    pthread_t th[num_cajeros];
+    // Generamos los hilos
+    pthread_t th_productores[num_cajeros];
+    pthread_t th_consumidores[num_empleados];
     operacion_t op[num_operaciones];
     insertar_elem_t ie[num_operaciones];
+    ejecutar_op_t eo[num_operaciones];
     // Establecemos el mutex
     pthread_mutex_init(&mutex, NULL);
     pthread_cond_init(&cola_no_llena, NULL);
     pthread_cond_init(&cola_no_vacia, NULL);
     while (client_numop < num_operaciones){
+        // PRODUCTORES:
+        // Creamos el cajero (hilo productor) y le pasamos una operación,
+        // deben leer la operación indicada en client_numop
         int i;
-        for(i=0; i<num_cajeros; i++){
-            //printf("Creando hilo %d\n", i);        
+        for(i=0; i<num_cajeros; i++){      
             // Establecemos el número de operación correspondiente
             op[client_numop].num_operacion = client_numop+1;
             ie[client_numop].operacion_str = list_client_ops[client_numop];
             ie[client_numop].operacion = op[client_numop];
-            ie[client_numop].digitos_max_cuentas = digitos_max_cuentas;
+            ie[client_numop].variables.digitos_max_cuentas = digitos_max_cuentas;
             ie[client_numop].variables.read_arg1 = 0;
             ie[client_numop].variables.read_arg2 = 0;
             ie[client_numop].variables.read_arg3 = 0;
-            ie[client_numop].variables.max_cuentas = max_cuentas;
-            ie[client_numop].variables.cuenta1_char = (char*)malloc(digitos_max_cuentas);
+            ie[client_numop].variables.cuenta1_char = (char*)malloc(digitos_max_cuentas + 1);
             strcpy(ie[client_numop].variables.cuenta1_char, " ");
-            ie[client_numop].variables.cuenta2_char = (char*)malloc(digitos_max_cuentas);
+            ie[client_numop].variables.cuenta2_char = (char*)malloc(digitos_max_cuentas + 1);
             strcpy(ie[client_numop].variables.cuenta2_char, " ");
             strcpy(ie[client_numop].variables.cantidad_char, " ");
             ie[client_numop].variables.cuenta1 = -1; 
@@ -229,51 +246,80 @@ int main (int argc, const char * argv[] ) {
             ie[client_numop].variables.longitud = strlen(list_client_ops[client_numop]);
             ie[client_numop].variables.n = 0;
             ie[client_numop].variables.cambio = 0;
-            
-            pthread_create(&th[i], NULL, (void*)insertar_elemento_en_cola, &ie[client_numop]);
+            pthread_create(&th_productores[i], NULL, (void*)insertar_elemento_en_cola, &ie[client_numop]);
             client_numop++;
-        }      
-        int j;
-        for(j=0; j<num_cajeros; j++){
-            //printf("Join hilo %d\n", j);
-            pthread_join(th[j], NULL);
+            // Para asegurar que salgan en orden
+            sleep(0.5);
+            // Para no crear más hilos de los necesarios
+            if (client_numop >= num_operaciones){
+                i++;
+                break;
+            }
+        }  
+        
+        // CONSUMIDORES:
+        int k;
+        for (k=0; k<num_empleados; k++){
+            eo[bank_numop].bank_numop = bank_numop+1;
+            eo[bank_numop].max_cuentas = max_cuentas;
+            pthread_create(&th_consumidores[k], NULL, (void*)ejecutar_operacion_de_cola, &eo[bank_numop]);
+            sleep(0.5);
+            if (bank_numop >= num_operaciones){
+                k++;
+                break;
+            }
+            bank_numop++;
         }
+        
+        // PRODUCTORES:
+        // Esperamos a los hilos que se hayan creado
+        int j;
+        for(j=0; j<i; j++){
+            pthread_join(th_productores[j], NULL);
+        }
+
+        // CONSUMIDORES:
+        int v;
+        for(v=0; v<k; v++){
+            pthread_join(th_consumidores[v], NULL);
+        }
+
+
     }
+
     // Tras el procesamiento de las operaciones liberamos la memoria 
     // reservada con malloc
     free(list_client_ops);
+    queue_destroy(cola);
+    free(saldo_cuenta);
+    // Eliminamos los mutex y condiciones
+    pthread_mutex_destroy(&mutex);
+    pthread_cond_destroy(&cola_no_llena);
+    pthread_cond_destroy(&cola_no_vacia);
 
     return 0;
 }
 
+
+// -------------------------------------- PRODUCTORES ----------------------------------------------------
+
 void insertar_elemento_en_cola(insertar_elem_t *param){
-    //printf("entro\n");
-    //printf("hilo: %ld\n", pthread_self());
-    sleep(2);
     operacion_t operacion;
     operacion = crear_elemento_operacion(param->operacion_str, param->operacion, param->variables.read_arg1,
-                                param->variables.read_arg2, param->variables.read_arg3,
-                                param->variables.max_cuentas, param->variables.cuenta1_char, 
-                                param->variables.cuenta2_char, param->variables.cantidad_char,
-                                param->variables.cuenta1, param->variables.cuenta2, param->variables.cantidad,
-                                param->variables.i, param->variables.longitud, param->variables.n,
+                                param->variables.read_arg2, param->variables.read_arg3, 
+                                param->variables.digitos_max_cuentas, param->variables.cuenta1_char, 
+                                param->variables.cuenta2_char, param->variables.cantidad_char, 
+                                param->variables.cuenta1, param->variables.cuenta2, param->variables.cantidad, 
+                                param->variables.i, param->variables.longitud, param->variables.n, 
                                 param->variables.cambio);
        
-    // Lo escribimos en la cola, sin que el resto de hilos puedan escribir y en orden
-    while (operacion.num_operacion != indice){
-        pthread_mutex_lock(&mutex); 
-        sleep(2);
-    }
-
+    // Lo escribimos en la cola, sin que el resto de hilos puedan escribir
+    pthread_mutex_lock(&mutex);
     while (queue_full(cola) == 1){
-        pthread_cond_wait(&cola_no_llena, &mutex);
+        pthread_cond_wait(&cola_no_llena, &mutex);  
     }
+    queue_put(cola, operacion);
 
-
-    printf("Put: %d\nCACATUA: %d\nSize: %d\nOperacion EN QUEUE: %s\nCuenta1: %d\n", 
-           queue_put(cola, operacion), queue_empty(cola), cola->size, operacion.operacion, operacion.num_cuenta1);
-    indice++;
-    printf("Indice actualizado: %d\n", indice);
     pthread_cond_signal(&cola_no_vacia);
     pthread_mutex_unlock(&mutex);
 
@@ -281,8 +327,8 @@ void insertar_elemento_en_cola(insertar_elem_t *param){
 }
 
 operacion_t crear_elemento_operacion(char *operacion_str, operacion_t op,   
-                                    int read_arg1, int read_arg2, int read_arg3,
-                                    int max_cuentas, char *cuenta1_char, char *cuenta2_char, 
+                                    int read_arg1, int read_arg2, int read_arg3, 
+                                    int digitos_max_cuentas, char *cuenta1_char, char *cuenta2_char, 
                                     char *cantidad_char, int cuenta1, int cuenta2, 
                                     int cantidad, int i, int longitud, int n, int cambio){                       
 
@@ -310,8 +356,9 @@ operacion_t crear_elemento_operacion(char *operacion_str, operacion_t op,
         i = 6;
     }
     else{
-        printf("Error: Operación incorrecta\n");
-        pthread_exit(NULL);
+        // Error: Operación incorrecta
+        strcpy(op.operacion, "N/A");
+        return op;
     }
 
     // Buscamos el número de cuenta y cantidad 
@@ -322,28 +369,26 @@ operacion_t crear_elemento_operacion(char *operacion_str, operacion_t op,
             n = 0;
         }
         if ((operacion_str[i] != ' ') && (read_arg1 == 0)){
-            cuenta1_char[n] = operacion_str[i];
+            // Añadimos un char más del máximo para poder comprobar 
+            // si es una cuenta válida (no excede) en los hilos trabajadores
+            if (n < (digitos_max_cuentas+1)){
+             cuenta1_char[n] = operacion_str[i];
+            }
 
             if ((i+1 == longitud) || (operacion_str[i+1] == ' ')){
                 read_arg1 = 1;
                 cuenta1 = atoi(cuenta1_char);
-                if (cuenta1 > max_cuentas){
-                    printf("Error: Número máximo de cuentas excedido\n");
-                    pthread_exit(NULL);
-                }
                 op.num_cuenta1 = cuenta1;
                 cambio = 1;
             }
         }
         else if((operacion_str[i] != ' ') && (read_arg2 == 0)){
             cambio = 0;
-            if (strncmp(op.operacion, "TRASPASAR", 9) != 0){
-                if (n < MAX_DIGITOS_CANTIDAD_TRANSACCION){
+            if (strncmp(op.operacion, "TRASPASAR", 9) != 0){ 
+                // Añadimos un dígito más del máximo para poder comprobar 
+                // si es una cantidad válida (no excede) en los hilos trabajadores
+                if (n < (MAX_DIGITOS_CANTIDAD_TRANSACCION+1)){
                     cantidad_char[n] = operacion_str[i];
-                }
-                else{
-                    printf("Error: No se admite esa cantidad, debe tener 10 dígitos como máximo\n");
-                    pthread_exit(NULL);
                 }
 
                 if ((i+1 == longitud) || (operacion_str[i+1] == ' ')){
@@ -355,21 +400,18 @@ operacion_t crear_elemento_operacion(char *operacion_str, operacion_t op,
             }
             else if(strncmp(op.operacion, "CREAR", 5) == 0 || 
                     strncmp(op.operacion, "SALDO", 5) == 0 ){
-
-                printf("Error: Número máximo de argumentos excedido\n");
-                pthread_exit(NULL);
+                // Error: Número máximo de argumentos excedido
+                strcpy(op.operacion, "N/A");
             }
             else{
                 // Si es la operación TRASPASAR buscamos cuenta2
-                cuenta2_char[n] = operacion_str[i];
-                
+                if (n < (digitos_max_cuentas+1)){
+                    cuenta2_char[n] = operacion_str[i];
+                }
+
                 if ((i+1 == longitud) || (operacion_str[i+1] == ' ')){
                     read_arg2 = 1;
                     cuenta2 = atoi(cuenta2_char);
-                    if (cuenta2 > max_cuentas){
-                        printf("Error: Número máximo de cuentas excedido\n");
-                        pthread_exit(NULL);
-                    }
                     op.num_cuenta2 = cuenta2;
                     cambio = 1;
                 }
@@ -380,13 +422,9 @@ operacion_t crear_elemento_operacion(char *operacion_str, operacion_t op,
         else if((operacion_str[i] != ' ') && (read_arg3 == 0)){
             cambio = 0;
             if (strncmp(op.operacion, "TRASPASAR", 9) == 0){
-                if (n <= MAX_DIGITOS_CANTIDAD_TRANSACCION){
+                if (n <= MAX_DIGITOS_CANTIDAD_TRANSACCION + 1){
                     cantidad_char[n] = operacion_str[i];
                 }
-                else{
-                    printf("Error: No se admite esa cantidad, debe tener 10 dígitos como máximo");
-                    pthread_exit(NULL);
-                }     
 
                 if((i+1 == longitud) || (operacion_str[i+1] == ' ')){
                     read_arg3 = 1;
@@ -396,8 +434,8 @@ operacion_t crear_elemento_operacion(char *operacion_str, operacion_t op,
                 }
             }
             else{
-                printf("Error: Número máximo de argumentos excedido\n");
-                pthread_exit(NULL);
+                // Error: Número máximo de argumentos excedido
+                strcpy(op.operacion, "N/A");
             }
         }
         i++;
@@ -406,20 +444,146 @@ operacion_t crear_elemento_operacion(char *operacion_str, operacion_t op,
 
 
     if (cuenta1 == -1){
-        printf("Error: Falta indicar la cuenta\n");
-        pthread_exit(NULL);
+        // Error: Falta indicar la cuenta
+        strcpy(op.operacion, "N/A");
     }
-    if (cuenta2 == -1 && strncmp(op.operacion, "TRASPASAR", 9) == 0){
-        printf("Error: Falta indicar la cuenta destinataria\n");
-        pthread_exit(NULL);
+    else if (cuenta2 == -1 && strncmp(op.operacion, "TRASPASAR", 9) == 0){
+        //Error: Falta indicar la cuenta destinataria
+        strcpy(op.operacion, "N/A");
     }
-    if ((cantidad == -1 && strncmp(op.operacion, "CREAR", 5) != 0) &&
+    else if ((cantidad == -1 && strncmp(op.operacion, "CREAR", 5) != 0) &&
         (cantidad == -1 && strncmp(op.operacion, "SALDO", 5) != 0) ){
-        printf("Error: Falta indicar la cantidad\n");
-        pthread_exit(NULL);
+        // Error: Falta indicar la cantidad
+        strcpy(op.operacion, "N/A");
     }
 
-    //printf("Terminando hilo. Operación establecida: %s. \nNum cuenta1:%d. \nNum cuenta2:%d\n", op.operacion, op.num_cuenta1, op.num_cuenta2);
-    //printf("Saldo de la cuenta: %d\n\n", op.cantidad);
+    // Liberamos el espacio de los str de cuenta reservados on malloc
+    free(cuenta1_char);
+    free(cuenta2_char);
+
     return op;
+}
+
+
+// -------------------------------------- CONSUMIDORES ----------------------------------------------------
+
+void ejecutar_operacion_de_cola(ejecutar_op_t *param){
+
+    pthread_mutex_lock(&mutex);
+    while (queue_empty(cola) == 1){
+        pthread_cond_wait(&cola_no_vacia, &mutex);  
+    }
+
+    operacion_t operacion = queue_get(cola);
+
+    if (strncmp(operacion.operacion, "CREAR", 5) == 0){
+        if (operacion.num_cuenta1 > param->max_cuentas){
+            printf("Error: Número máximo de cuentas excedido\n");
+        }
+        else if (saldo_cuenta[operacion.num_cuenta1-1] == -1){
+            // Si es una operación de tipo crear inicializamos su saldo a 0
+            saldo_cuenta[operacion.num_cuenta1-1] = 0;
+            // Mostramos el resultado por pantalla
+            printf("%d CREAR %d SALDO=%d TOTAL=%d\n", operacion.num_operacion, 
+                   operacion.num_cuenta1, saldo_cuenta[operacion.num_cuenta1-1], 
+                   global_balance);
+        }
+        else{
+            // No crearemos una cuenta ya existente
+            printf("Error: La cuenta ya existe\n");
+        }
+    }
+    else if (strncmp(operacion.operacion, "INGRESAR", 8) == 0){
+        if (operacion.num_cuenta1 > param->max_cuentas){
+            printf("Error: Número máximo de cuentas excedido\n");
+        }
+        else if (saldo_cuenta[operacion.num_cuenta1-1] < 0){
+            printf("Error: La cuenta no existe\n");
+        }
+        else if (operacion.cantidad > MAX_CANTIDAD_TRANSACCION){
+            printf("Error: Máxima cantidad de ingreso excedida\n");
+        }
+        else{
+            // Si es una operación de tipo ingresar sumamos la cantidad a la cuenta
+            saldo_cuenta[operacion.num_cuenta1-1] += operacion.cantidad;
+            // Actualizamos el saldo global
+            global_balance += operacion.cantidad;
+            // Mostramos el resultado por pantalla
+            printf("%d INGRESAR %d %d SALDO=%d TOTAL=%d\n", operacion.num_operacion, 
+                   operacion.num_cuenta1, operacion.cantidad, saldo_cuenta[operacion.num_cuenta1-1], 
+                   global_balance);
+        }
+    }
+    else if (strncmp(operacion.operacion, "TRASPASAR", 9) == 0){
+        if ((operacion.num_cuenta1 > param->max_cuentas) ||
+            (operacion.num_cuenta2 > param->max_cuentas)){
+            printf("Error: Número máximo de cuentas excedido\n");
+        }
+        else if ((saldo_cuenta[operacion.num_cuenta1-1] < 0) ||
+                 (saldo_cuenta[operacion.num_cuenta2-1] < 0)){
+            printf("Error: La cuenta no existe\n");
+        }
+        else if (operacion.cantidad > MAX_CANTIDAD_TRANSACCION){
+            printf("Error: Máxima cantidad de ingreso excedida\n");
+        }
+        else if ((saldo_cuenta[operacion.num_cuenta1-1] - operacion.cantidad) < 0){
+            printf("Error: No se dispone del suficiente saldo para realizar el traspaso\n");
+        }
+        else{
+            // Si es una operación de tipo traspasar sumamos la cantidad a la cuenta2
+            // y se la restamos a la cuenta1 (no es necesario actualizar global_balance)
+            saldo_cuenta[operacion.num_cuenta1-1] -= operacion.cantidad;
+            saldo_cuenta[operacion.num_cuenta2-1] += operacion.cantidad;
+            // Mostramos el resultado por pantalla
+            printf("%d TRASPASAR %d %d %d SALDO=%d TOTAL=%d\n", operacion.num_operacion, 
+                   operacion.num_cuenta1, operacion.num_cuenta2, operacion.cantidad, 
+                   saldo_cuenta[operacion.num_cuenta2-1], global_balance);
+        }
+    }
+    else if (strncmp(operacion.operacion, "RETIRAR", 7) == 0){
+        if (operacion.num_cuenta1 > param->max_cuentas){
+            printf("Error: Número máximo de cuentas excedido\n");
+        }
+        else if (saldo_cuenta[operacion.num_cuenta1-1] < 0){
+            printf("Error: La cuenta no existe\n");
+        }
+        else if (operacion.cantidad > MAX_CANTIDAD_TRANSACCION){
+            printf("Error: Máxima cantidad de ingreso excedida\n");
+        }
+        else if ((saldo_cuenta[operacion.num_cuenta1-1] - operacion.cantidad) < 0){
+            printf("Error: No se dispone del suficiente saldo para retirar dicha cantidad\n");
+        }
+        else{
+            // Si es una operación de tipo retirar, restamos la cantidad a la cuenta
+            saldo_cuenta[operacion.num_cuenta1-1] -= operacion.cantidad;
+            // Actualizamos el saldo global
+            global_balance -= operacion.cantidad;
+            // Mostramos el resultado por pantalla
+            printf("%d RETIRAR %d %d SALDO=%d TOTAL=%d\n", operacion.num_operacion, 
+                   operacion.num_cuenta1, operacion.cantidad, saldo_cuenta[operacion.num_cuenta1-1], 
+                   global_balance);
+        }
+    }
+    else if (strncmp(operacion.operacion, "SALDO", 5) == 0){
+        if (operacion.num_cuenta1 > param->max_cuentas){
+            printf("Error: Número máximo de cuentas excedido\n");
+        }
+        else if (saldo_cuenta[operacion.num_cuenta1-1] < 0){
+            printf("Error: La cuenta no existe\n");
+        }
+        else{
+            // Si la operación es saldo, únicamente lo mostramos
+            printf("%d SALDO %d SALDO=%d TOTAL=%d\n", operacion.num_operacion, 
+                   operacion.num_cuenta1, saldo_cuenta[operacion.num_cuenta1-1], 
+                   global_balance);
+        }
+    }
+    else{
+        printf("Error: Operación incorrecta\n");
+    }
+
+    pthread_cond_signal(&cola_no_llena);
+    pthread_mutex_unlock(&mutex);
+    
+    pthread_exit(NULL);
 }

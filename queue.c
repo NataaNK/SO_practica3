@@ -8,7 +8,6 @@
 
 
 //To create a queue
-
 queue* queue_init(int size){
     queue *q = (queue *)malloc(sizeof(queue));
     q->max_size = size;
@@ -51,7 +50,7 @@ int queue_empty(queue *q){
 }
 
 int queue_full(queue *q){
-	if (q->size == q->max_size){
+	if (q->size >= q->max_size){
 		return 1;
 	}
 	else{
@@ -64,6 +63,7 @@ int queue_destroy(queue *q){
 	q->element = NULL;
 	q->max_size = 0;
 	q->size = 0;
+	free(q->element);
 	free(q);
 	return 0;
 }
