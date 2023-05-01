@@ -23,8 +23,11 @@ int client_numop = 0;
 int bank_numop = 0;
 int global_balance = 0;
 int *saldo_cuenta;
-pthread_mutex_t mutex;
 queue *cola;
+pthread_mutex_t mutex;
+int indice = 1;
+pthread_cond_t cola_no_llena;
+pthread_cond_t cola_no_vacia;
 
 /**
  * Entry point
@@ -190,18 +193,21 @@ int main (int argc, const char * argv[] ) {
         exit(-1);
     }
 
-    // Establecemos el mutex
-    pthread_mutex_init(&mutex, NULL);
+    
     
     // Creamos el cajero (hilo productor) y le pasamos una operación,
     // deben leer la operación indicada en client_numop
     pthread_t th[num_cajeros];
     operacion_t op[num_operaciones];
     insertar_elem_t ie[num_operaciones];
+    // Establecemos el mutex
+    pthread_mutex_init(&mutex, NULL);
+    pthread_cond_init(&cola_no_llena, NULL);
+    pthread_cond_init(&cola_no_vacia, NULL);
     while (client_numop < num_operaciones){
         int i;
         for(i=0; i<num_cajeros; i++){
-            printf("Creando hilo %d\n", i);        
+            //printf("Creando hilo %d\n", i);        
             // Establecemos el número de operación correspondiente
             op[client_numop].num_operacion = client_numop+1;
             ie[client_numop].operacion_str = list_client_ops[client_numop];
@@ -229,7 +235,7 @@ int main (int argc, const char * argv[] ) {
         }      
         int j;
         for(j=0; j<num_cajeros; j++){
-            printf("Join hilo %d\n", j);
+            //printf("Join hilo %d\n", j);
             pthread_join(th[j], NULL);
         }
     }
@@ -244,7 +250,8 @@ void insertar_elemento_en_cola(insertar_elem_t *param){
     //printf("entro\n");
     //printf("hilo: %ld\n", pthread_self());
     sleep(2);
-    crear_elemento_operacion(param->operacion_str, param->operacion, param->variables.read_arg1,
+    operacion_t operacion;
+    operacion = crear_elemento_operacion(param->operacion_str, param->operacion, param->variables.read_arg1,
                                 param->variables.read_arg2, param->variables.read_arg3,
                                 param->variables.max_cuentas, param->variables.cuenta1_char, 
                                 param->variables.cuenta2_char, param->variables.cantidad_char,
@@ -253,7 +260,22 @@ void insertar_elemento_en_cola(insertar_elem_t *param){
                                 param->variables.cambio);
        
     // Lo escribimos en la cola, sin que el resto de hilos puedan escribir y en orden
-    printf("CACATUA: %d Size: %d\n", queue_empty(cola), cola->size);
+    while (operacion.num_operacion != indice){
+        pthread_mutex_lock(&mutex); 
+        sleep(2);
+    }
+
+    while (queue_full(cola) == 1){
+        pthread_cond_wait(&cola_no_llena, &mutex);
+    }
+
+
+    printf("Put: %d\nCACATUA: %d\nSize: %d\nOperacion EN QUEUE: %s\nCuenta1: %d\n", 
+           queue_put(cola, operacion), queue_empty(cola), cola->size, operacion.operacion, operacion.num_cuenta1);
+    indice++;
+    printf("Indice actualizado: %d\n", indice);
+    pthread_cond_signal(&cola_no_vacia);
+    pthread_mutex_unlock(&mutex);
 
     pthread_exit(NULL);
 }
@@ -397,7 +419,7 @@ operacion_t crear_elemento_operacion(char *operacion_str, operacion_t op,
         pthread_exit(NULL);
     }
 
-    printf("Terminando hilo. Operación establecida: %s. \nNum cuenta1:%d. \nNum cuenta2:%d\n", op.operacion, op.num_cuenta1, op.num_cuenta2);
-    printf("Saldo de la cuenta: %d\n\n", op.cantidad);
+    //printf("Terminando hilo. Operación establecida: %s. \nNum cuenta1:%d. \nNum cuenta2:%d\n", op.operacion, op.num_cuenta1, op.num_cuenta2);
+    //printf("Saldo de la cuenta: %d\n\n", op.cantidad);
     return op;
 }
