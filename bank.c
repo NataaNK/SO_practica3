@@ -213,7 +213,7 @@ int main (int argc, const char * argv[] ) {
             ie[client_numop].variables.max_cuentas = max_cuentas;
             ie[client_numop].variables.cuenta1_char = (char*)malloc(digitos_max_cuentas);
             strcpy(ie[client_numop].variables.cuenta1_char, " ");
-            ie[client_numop-1].variables.cuenta2_char = (char*)malloc(digitos_max_cuentas);
+            ie[client_numop].variables.cuenta2_char = (char*)malloc(digitos_max_cuentas);
             strcpy(ie[client_numop].variables.cuenta2_char, " ");
             strcpy(ie[client_numop].variables.cantidad_char, " ");
             ie[client_numop].variables.cuenta1 = -1; 
