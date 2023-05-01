@@ -8,16 +8,13 @@
 
 
 //To create a queue
+
 queue* queue_init(int size){
-	printf("creando cola \n");
-    queue q;// = (queue*)malloc(size);
-	printf("max");
-    q.max_size = size;
-	printf("sixe"); 
-    q.size = 0;
-	printf("AAAAAAAAAAA");
-	q.element = (operacion_t*)malloc(sizeof(operacion_t) * size);
-	return &q;
+    queue *q = (queue *)malloc(sizeof(queue));
+    q->max_size = size;
+    q->size = 0;
+    q->element = (operacion_t *)malloc(sizeof(operacion_t) * size);
+    return q;
 }
 
 

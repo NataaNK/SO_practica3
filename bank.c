@@ -68,7 +68,7 @@ void insertar_elemento_en_cola(insertar_elem_t *op);
 
 
  
-int main (int argc, const char * argv[]) {
+int main (int argc, const char * argv[] ) {
     //./bank <nombre fichero> <num cajeros> <num trabajadores> <max cuentas>
     // <tam buff>
 
@@ -198,12 +198,12 @@ int main (int argc, const char * argv[]) {
     pthread_t th[num_cajeros];
     operacion_t op[num_operaciones];
     insertar_elem_t ie[num_operaciones];
-    while (client_numop < num_operaciones){
+    while (client_numop <= num_operaciones){
         int i;
         for(i=0; i<num_cajeros; i++){
             printf("Creando hilo %d\n", i);        
             // Establecemos el número de operación correspondiente
-            op[client_numop].num_operacion = client_numop;
+            op[client_numop].num_operacion = client_numop+1;
             ie[client_numop].operacion_str = list_client_ops[client_numop];
             ie[client_numop].operacion = op[client_numop];
             ie[client_numop].digitos_max_cuentas = digitos_max_cuentas;
@@ -213,7 +213,7 @@ int main (int argc, const char * argv[]) {
             ie[client_numop].variables.max_cuentas = max_cuentas;
             ie[client_numop].variables.cuenta1_char = (char*)malloc(digitos_max_cuentas);
             strcpy(ie[client_numop].variables.cuenta1_char, " ");
-            ie[client_numop].variables.cuenta2_char = (char*)malloc(digitos_max_cuentas);
+            ie[client_numop-1].variables.cuenta2_char = (char*)malloc(digitos_max_cuentas);
             strcpy(ie[client_numop].variables.cuenta2_char, " ");
             strcpy(ie[client_numop].variables.cantidad_char, " ");
             ie[client_numop].variables.cuenta1 = -1; 
@@ -244,8 +244,7 @@ void insertar_elemento_en_cola(insertar_elem_t *param){
     //printf("entro\n");
     //printf("hilo: %ld\n", pthread_self());
     sleep(2);
-    operacion_t operacion;
-    operacion = crear_elemento_operacion(param->operacion_str, param->operacion, param->variables.read_arg1,
+    crear_elemento_operacion(param->operacion_str, param->operacion, param->variables.read_arg1,
                                 param->variables.read_arg2, param->variables.read_arg3,
                                 param->variables.max_cuentas, param->variables.cuenta1_char, 
                                 param->variables.cuenta2_char, param->variables.cantidad_char,
@@ -254,9 +253,6 @@ void insertar_elemento_en_cola(insertar_elem_t *param){
                                 param->variables.cambio);
        
     // Lo escribimos en la cola, sin que el resto de hilos puedan escribir y en orden
-    printf("Put: %d\n", queue_put(cola, operacion));
-    printf("Queue empty: %d\n", queue_empty(cola));
-    printf("Queue Size: %d\n", cola->size);
     
     pthread_exit(NULL);
 }
@@ -400,6 +396,7 @@ operacion_t crear_elemento_operacion(char *operacion_str, operacion_t op,
         pthread_exit(NULL);
     }
 
-    printf("Operación establecida: %s\n. Num cuenta1:%d\n. Num cuenta2:%d\n. CANTIDAD: %d\n\n", op.operacion, op.num_cuenta1, op.num_cuenta2, op.cantidad);
+    printf("Terminando hilo. Operación establecida: %s. \nNum cuenta1:%d. \nNum cuenta2:%d\n", op.operacion, op.num_cuenta1, op.num_cuenta2);
+    printf("Saldo de la cuenta: %d\n\n", op.cantidad);
     return op;
 }
