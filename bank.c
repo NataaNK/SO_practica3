@@ -198,7 +198,7 @@ int main (int argc, const char * argv[] ) {
     pthread_t th[num_cajeros];
     operacion_t op[num_operaciones];
     insertar_elem_t ie[num_operaciones];
-    while (client_numop <= num_operaciones){
+    while (client_numop < num_operaciones){
         int i;
         for(i=0; i<num_cajeros; i++){
             printf("Creando hilo %d\n", i);        
@@ -253,7 +253,8 @@ void insertar_elemento_en_cola(insertar_elem_t *param){
                                 param->variables.cambio);
        
     // Lo escribimos en la cola, sin que el resto de hilos puedan escribir y en orden
-    
+    printf("CACATUA: %d Size: %d\n", queue_empty(cola), cola->size);
+
     pthread_exit(NULL);
 }
 
