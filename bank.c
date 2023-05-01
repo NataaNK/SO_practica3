@@ -12,11 +12,17 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
-// Constantes
+// Constantes:
 #define MAX_OPERACIONES 200
 #define MAX_DIGITOS_CANTIDAD_TRANSACCION 10
 
-// Variables globales
+// Variables globales:
+// Lista que contiene las operaciones en formato string
+char **list_client_ops;
+int client_numop = 0;
+int bank_numop = 0;
+int global_balance = 0;
+int *saldo_cuenta;
 pthread_mutex_t mutex;
 queue *cola;
 
@@ -27,7 +33,7 @@ queue *cola;
  * @return
  */
 
-// Estructuras
+// Estructuras:
 typedef struct crear_elem{
     int read_arg1;
     int read_arg2;
@@ -52,7 +58,7 @@ typedef struct insertar_elem{
     int digitos_max_cuentas;
 }insertar_elem_t;
 
-// Prototipos
+// Prototipos:
 operacion_t crear_elemento_operacion(char *operacion_str, operacion_t op,   
                                     int read_arg1, int read_arg2, int read_arg3,
                                     int max_cuentas, char *cuenta1_char, char *cuenta2_char, 
@@ -62,7 +68,7 @@ void insertar_elemento_en_cola(insertar_elem_t *op);
 
 
  
-int main (int argc, const char * argv[] ) {
+int main (int argc, const char * argv[]) {
     //./bank <nombre fichero> <num cajeros> <num trabajadores> <max cuentas>
     // <tam buff>
 
@@ -119,9 +125,6 @@ int main (int argc, const char * argv[] ) {
     char num_operaciones_char[3];
     int num_operaciones;
     int primer_char = 1;
-    // Lista que contiene las operaciones en formato string
-    char **list_client_ops;
-
     while ((bytes = read(fd, buf, 1)) > 0){ 
         vacio = 0;
         // Si estamos al principio del fichero, leemos primero 
@@ -192,37 +195,36 @@ int main (int argc, const char * argv[] ) {
     
     // Creamos el cajero (hilo productor) y le pasamos una operación,
     // deben leer la operación indicada en client_numop
-    int client_numop=1;
     pthread_t th[num_cajeros];
     operacion_t op[num_operaciones];
     insertar_elem_t ie[num_operaciones];
-    while (client_numop <= num_operaciones){
+    while (client_numop < num_operaciones){
         int i;
         for(i=0; i<num_cajeros; i++){
             printf("Creando hilo %d\n", i);        
             // Establecemos el número de operación correspondiente
-            op[client_numop-1].num_operacion = client_numop;
-            ie[client_numop-1].operacion_str = list_client_ops[client_numop-1];
-            ie[client_numop-1].operacion = op[client_numop-1];
-            ie[client_numop-1].digitos_max_cuentas = digitos_max_cuentas;
-            ie[client_numop-1].variables.read_arg1 = 0;
-            ie[client_numop-1].variables.read_arg2 = 0;
-            ie[client_numop-1].variables.read_arg3 = 0;
-            ie[client_numop-1].variables.max_cuentas = max_cuentas;
-            ie[client_numop-1].variables.cuenta1_char = (char*)malloc(digitos_max_cuentas);
-            strcpy(ie[client_numop-1].variables.cuenta1_char, " ");
-            ie[client_numop-1].variables.cuenta2_char = (char*)malloc(digitos_max_cuentas);
-            strcpy(ie[client_numop-1].variables.cuenta2_char, " ");
-            strcpy(ie[client_numop-1].variables.cantidad_char, " ");
-            ie[client_numop-1].variables.cuenta1 = -1; 
-            ie[client_numop-1].variables.cuenta2 = -1;
-            ie[client_numop-1].variables.cantidad = -1;
-            ie[client_numop-1].variables.i = 0;
-            ie[client_numop-1].variables.longitud = strlen(list_client_ops[client_numop-1]);
-            ie[client_numop-1].variables.n = 0;
-            ie[client_numop-1].variables.cambio = 0;
+            op[client_numop].num_operacion = client_numop;
+            ie[client_numop].operacion_str = list_client_ops[client_numop];
+            ie[client_numop].operacion = op[client_numop];
+            ie[client_numop].digitos_max_cuentas = digitos_max_cuentas;
+            ie[client_numop].variables.read_arg1 = 0;
+            ie[client_numop].variables.read_arg2 = 0;
+            ie[client_numop].variables.read_arg3 = 0;
+            ie[client_numop].variables.max_cuentas = max_cuentas;
+            ie[client_numop].variables.cuenta1_char = (char*)malloc(digitos_max_cuentas);
+            strcpy(ie[client_numop].variables.cuenta1_char, " ");
+            ie[client_numop].variables.cuenta2_char = (char*)malloc(digitos_max_cuentas);
+            strcpy(ie[client_numop].variables.cuenta2_char, " ");
+            strcpy(ie[client_numop].variables.cantidad_char, " ");
+            ie[client_numop].variables.cuenta1 = -1; 
+            ie[client_numop].variables.cuenta2 = -1;
+            ie[client_numop].variables.cantidad = -1;
+            ie[client_numop].variables.i = 0;
+            ie[client_numop].variables.longitud = strlen(list_client_ops[client_numop]);
+            ie[client_numop].variables.n = 0;
+            ie[client_numop].variables.cambio = 0;
             
-            pthread_create(&th[i], NULL, (void*)insertar_elemento_en_cola, &ie[client_numop-1]);
+            pthread_create(&th[i], NULL, (void*)insertar_elemento_en_cola, &ie[client_numop]);
             client_numop++;
         }      
         int j;
@@ -242,7 +244,8 @@ void insertar_elemento_en_cola(insertar_elem_t *param){
     //printf("entro\n");
     //printf("hilo: %ld\n", pthread_self());
     sleep(2);
-    crear_elemento_operacion(param->operacion_str, param->operacion, param->variables.read_arg1,
+    operacion_t operacion;
+    operacion = crear_elemento_operacion(param->operacion_str, param->operacion, param->variables.read_arg1,
                                 param->variables.read_arg2, param->variables.read_arg3,
                                 param->variables.max_cuentas, param->variables.cuenta1_char, 
                                 param->variables.cuenta2_char, param->variables.cantidad_char,
@@ -251,7 +254,9 @@ void insertar_elemento_en_cola(insertar_elem_t *param){
                                 param->variables.cambio);
        
     // Lo escribimos en la cola, sin que el resto de hilos puedan escribir y en orden
-    printf("CACACACTUA : %d\n", queue_empty(cola));
+    printf("Put: %d\n", queue_put(cola, operacion));
+    printf("Queue empty: %d\n", queue_empty(cola));
+    printf("Queue Size: %d\n", cola->size);
     
     pthread_exit(NULL);
 }
@@ -299,12 +304,10 @@ operacion_t crear_elemento_operacion(char *operacion_str, operacion_t op,
         }
         if ((operacion_str[i] != ' ') && (read_arg1 == 0)){
             cuenta1_char[n] = operacion_str[i];
-            printf("CUENTA 1 CHAR: %c, con n=%d\n", cuenta1_char[n], n);
 
             if ((i+1 == longitud) || (operacion_str[i+1] == ' ')){
                 read_arg1 = 1;
                 cuenta1 = atoi(cuenta1_char);
-                printf("CUENTA 1 DESPUES ATOI %d\n", cuenta1);
                 if (cuenta1 > max_cuentas){
                     printf("Error: Número máximo de cuentas excedido\n");
                     pthread_exit(NULL);
@@ -318,7 +321,6 @@ operacion_t crear_elemento_operacion(char *operacion_str, operacion_t op,
             if (strncmp(op.operacion, "TRASPASAR", 9) != 0){
                 if (n < MAX_DIGITOS_CANTIDAD_TRANSACCION){
                     cantidad_char[n] = operacion_str[i];
-                    printf("CANTIDAD CHAR: %c\n", cantidad_char[n]);
                 }
                 else{
                     printf("Error: No se admite esa cantidad, debe tener 10 dígitos como máximo\n");
@@ -327,7 +329,6 @@ operacion_t crear_elemento_operacion(char *operacion_str, operacion_t op,
 
                 if ((i+1 == longitud) || (operacion_str[i+1] == ' ')){
                     read_arg2 = 1;
-                    printf("cantidad: %s\n", cantidad_char);
                     cantidad = atoi(cantidad_char); 
                     op.cantidad = cantidad;
                     cambio = 1;
@@ -342,7 +343,6 @@ operacion_t crear_elemento_operacion(char *operacion_str, operacion_t op,
             else{
                 // Si es la operación TRASPASAR buscamos cuenta2
                 cuenta2_char[n] = operacion_str[i];
-                printf("CUENTA 2 CHAR: %c\n", cuenta2_char[n]);
                 
                 if ((i+1 == longitud) || (operacion_str[i+1] == ' ')){
                     read_arg2 = 1;
@@ -363,7 +363,6 @@ operacion_t crear_elemento_operacion(char *operacion_str, operacion_t op,
             if (strncmp(op.operacion, "TRASPASAR", 9) == 0){
                 if (n <= MAX_DIGITOS_CANTIDAD_TRANSACCION){
                     cantidad_char[n] = operacion_str[i];
-                    printf("CUANTIDAD TRAS CHAR: %c\n", cantidad_char[n]);
                 }
                 else{
                     printf("Error: No se admite esa cantidad, debe tener 10 dígitos como máximo");
@@ -401,7 +400,6 @@ operacion_t crear_elemento_operacion(char *operacion_str, operacion_t op,
         pthread_exit(NULL);
     }
 
-    printf("Terminando hilo. Operación establecida: %s. Num cuenta1:%d. Num cuenta2:%d\n", op.operacion, op.num_cuenta1, op.num_cuenta2);
-    printf("Saldo de la cuenta: %d\n\n", op.cantidad);
+    printf("Operación establecida: %s\n. Num cuenta1:%d\n. Num cuenta2:%d\n. CANTIDAD: %d\n\n", op.operacion, op.num_cuenta1, op.num_cuenta2, op.cantidad);
     return op;
 }
