@@ -376,11 +376,11 @@ operacion_t crear_elemento_operacion(char *operacion_str, operacion_t op,
             }
             
             if ((i+1 == longitud) || (operacion_str[i+1] == ' ')){
-                char cuenta1_tmp[n+1];
-                strcpy(cuenta1_tmp, cuenta1_char);
                 read_arg1 = 1;
+                // Aseguramos que únicamente se meten los números que queremos
+                cuenta1_char[n+1] = 0;
                 //printf("cuenta 1 temporal: %s\n", cuenta1_tmp);
-                cuenta1 = atoi(cuenta1_tmp);
+                cuenta1 = atoi(cuenta1_char);
                 op.num_cuenta1 = cuenta1;
                 cambio = 1;
             }
@@ -396,9 +396,9 @@ operacion_t crear_elemento_operacion(char *operacion_str, operacion_t op,
 
                 if ((i+1 == longitud) || (operacion_str[i+1] == ' ')){
                     read_arg2 = 1;
-                    char cantidad_tmp[n+1];
-                    strcpy(cantidad_tmp, cantidad_char);
-                    cantidad = atoi(cantidad_tmp); 
+                    // Aseguramos que únicamente se meten los números que queremos
+                    cantidad_char[n+1] = 0;
+                    cantidad = atoi(cantidad_char); 
                     op.cantidad = cantidad;
                     cambio = 1;
                 }
@@ -415,11 +415,10 @@ operacion_t crear_elemento_operacion(char *operacion_str, operacion_t op,
                 }
 
                 if ((i+1 == longitud) || (operacion_str[i+1] == ' ')){
-                    char cuenta2_tmp[n+1];
-                    strcpy(cuenta2_tmp, cuenta2_char);
-                    //printf("cuenta 2 temporal: %d\n", n);
                     read_arg2 = 1;
-                    cuenta2 = atoi(cuenta2_tmp);
+                    // Aseguramos que únicamente se meten los números que queremos
+                    cuenta2_char[n+1] = 0;
+                    cuenta2 = atoi(cuenta2_char);
                     op.num_cuenta2 = cuenta2;
                     cambio = 1;
                 }
@@ -436,9 +435,9 @@ operacion_t crear_elemento_operacion(char *operacion_str, operacion_t op,
 
                 if((i+1 == longitud) || (operacion_str[i+1] == ' ')){
                     read_arg3 = 1;
-                    char cantidad_tmp[n+1];
-                    strcpy(cantidad_tmp, cantidad_char);
-                    cantidad = atoi(cantidad_tmp); 
+                    // Aseguramos que únicamente se meten los números que queremos
+                    cantidad_char[n+1] = 0;
+                    cantidad = atoi(cantidad_char); 
                     op.cantidad = cantidad;
                     cambio = 1;
                 }
@@ -447,6 +446,10 @@ operacion_t crear_elemento_operacion(char *operacion_str, operacion_t op,
                 // Error: Número máximo de argumentos excedido
                 strcpy(op.operacion, "N/A");
             }
+        }
+        else if((operacion_str[i] != ' ') && (read_arg3 == 1)){
+            // Error: Número máximo de argumentos excedido
+            strcpy(op.operacion, "N/A");
         }
         i++;
         n++;
@@ -488,7 +491,7 @@ void ejecutar_operacion_de_cola(ejecutar_op_t *param){
 
     if (strncmp(operacion.operacion, "CREAR", 5) == 0){
         if (operacion.num_cuenta1 > param->max_cuentas){
-            printf("Error: Número máximo de cuentas excedido!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+            printf("Error: Número máximo de cuentas excedido\n");
             printf("Cuenta 1: %d. Max: %d y RESULTADO COMP: %d\n", operacion.num_cuenta1, param->max_cuentas,
             (operacion.num_cuenta1 > param->max_cuentas));
         }
@@ -514,7 +517,7 @@ void ejecutar_operacion_de_cola(ejecutar_op_t *param){
             printf("Error: La cuenta no existe\n");
         }
         else if (operacion.cantidad > MAX_CANTIDAD_TRANSACCION){
-            printf("Error: Máxima cantidad de ingreso excedida\n");
+            printf("Error: Máxima cantidad de transacción excedida\n");
         }
         else{
             // Si es una operación de tipo ingresar sumamos la cantidad a la cuenta
@@ -537,7 +540,7 @@ void ejecutar_operacion_de_cola(ejecutar_op_t *param){
             printf("Error: La cuenta no existe\n");
         }
         else if (operacion.cantidad > MAX_CANTIDAD_TRANSACCION){
-            printf("Error: Máxima cantidad de ingreso excedida\n");
+            printf("Error: Máxima cantidad de transacción excedida\n");
         }
         else{
             // Si es una operación de tipo traspasar sumamos la cantidad a la cuenta2
@@ -558,7 +561,7 @@ void ejecutar_operacion_de_cola(ejecutar_op_t *param){
             printf("Error: La cuenta no existe\n");
         }
         else if (operacion.cantidad > MAX_CANTIDAD_TRANSACCION){
-            printf("Error: Máxima cantidad de ingreso excedida\n");
+            printf("Error: Máxima cantidad de transacción excedida\n");
         }
         else{
             // Si es una operación de tipo retirar, restamos la cantidad a la cuenta
