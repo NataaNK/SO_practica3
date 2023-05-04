@@ -262,7 +262,7 @@ int main (int argc, const char * argv[] ) {
         }
          
         // Para asegurar que salgan en orden
-            sleep(0.5);
+        sleep(0.5);
 
         // CONSUMIDORES:
         if ((k < num_empleados) && (quedan_operaciones == 1)){
@@ -492,8 +492,6 @@ void ejecutar_operacion_de_cola(ejecutar_op_t *param){
     if (strncmp(operacion.operacion, "CREAR", 5) == 0){
         if (operacion.num_cuenta1 > param->max_cuentas){
             printf("Error: Número máximo de cuentas excedido\n");
-            printf("Cuenta 1: %d. Max: %d y RESULTADO COMP: %d\n", operacion.num_cuenta1, param->max_cuentas,
-            (operacion.num_cuenta1 > param->max_cuentas));
         }
         else if (cuentas_existentes[operacion.num_cuenta1-1] == 0){
             // Si es una operación de tipo crear inicializamos su saldo a 0
