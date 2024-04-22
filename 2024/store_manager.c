@@ -192,63 +192,54 @@ int main(int argc, const char *argv[])
     return 0;
 }
 
-operation *load_operations(const char *filename, int *total_ops)
-{
-    int fd = open(filename, O_RDONLY);
-    if (fd < 0)
-    {
+operation *load_operations(const char *filename, int *total_ops) {
+    FILE *fp = fopen(filename, "r");
+    if (!fp) {
         perror("Error opening file");
         return NULL;
     }
 
-    char buffer[4096]; // Buffer to store file contents temporarily
-    int bytes_read = read(fd, buffer, sizeof(buffer) - 1);
-    if (bytes_read < 0)
-    {
-        perror("Error reading file");
-        close(fd);
+    int max_operations;
+    if (fscanf(fp, "%d\n", &max_operations) != 1) {
+        fprintf(stderr, "Failed to read the number of operations.\n");
+        fclose(fp);
         return NULL;
     }
-    buffer[bytes_read] = '\0'; // Null terminate the string
-
-    int max_operations;
-    char *buf_ptr = buffer;
-    sscanf(buf_ptr, "%d\n", &max_operations);
-    buf_ptr = strchr(buf_ptr, '\n') + 1; // Move pointer to next line
 
     operation *operations = malloc(max_operations * sizeof(operation));
-    if (operations == NULL)
-    {
-        perror("Failed to allocate memory for operations");
-        close(fd);
-        return NULL;
-    }
 
+    char line[256];  // Buffer to store file contents temporarily, one line at a time
     int index = 0;
     int product_id, units;
     char type[10];
 
-    while (sscanf(buf_ptr, "%d %s %d\n", &product_id, type, &units) == 3 && index < max_operations)
-    {
-        operations[index].product_id = product_id;
-        operations[index].units = units;
-        if (strcmp(type, "PURCHASE") == 0)
-            operations[index].op_type = 0;
-        else if (strcmp(type, "SALE") == 0)
-            operations[index].op_type = 1;
-        else
-        {
-            fprintf(stderr, "Unknown operation type '%s' at index %d\n", type, index);
-            free(operations);
-            close(fd);
-            return NULL;
+    while (fgets(line, sizeof(line), fp) && index < max_operations) {
+        if (sscanf(line, "%d %s %d", &product_id, type, &units) == 3) {
+            operations[index].product_id = product_id;
+            operations[index].units = units;
+            if (strcmp(type, "PURCHASE") == 0)
+                operations[index].op_type = 0;
+            else if (strcmp(type, "SALE") == 0)
+                operations[index].op_type = 1;
+            else {
+                fprintf(stderr, "Unknown operation type '%s' at index %d\n", type, index);
+                free(operations);
+                fclose(fp);
+                return NULL;
+            }
+            index++;
         }
-        buf_ptr = strchr(buf_ptr, '\n') + 1; // Move to next line
-        index++;
     }
 
-    *total_ops = max_operations; // Set the actual number of operations read
-    close(fd);
+    if (index != max_operations) {
+        fprintf(stderr, "File contains fewer operations (%d) than specified (%d).\n", index, max_operations);
+        free(operations);
+        fclose(fp);
+        return NULL;
+    }
+
+    *total_ops = max_operations;
+    fclose(fp);
     return operations;
 }
 
