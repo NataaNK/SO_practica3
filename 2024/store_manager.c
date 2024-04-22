@@ -11,6 +11,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <stdbool.h>
 
 /*
 constantes y variables globales 
@@ -20,6 +21,9 @@ queue* buffer;  // Cola circular para las operaciones
 pthread_mutex_t mutex;  // Mutex para controlar el acceso a la cola
 pthread_cond_t can_produce;  // Condición para verificar si se puede producir (cola no llena)
 pthread_cond_t can_consume;  // Condición para verificar si se puede consumir (cola no vacía)
+/*La siguiente flag sirve para verificar que todos los hilos productores han terminado 
+de producir*/
+int producers_finished = false;
 
 /*
 La siguiente estructura sirva para almacenar cada operación.
@@ -43,15 +47,9 @@ typedef struct {
 } producer_arg;
 
 /*
-La siguiente estructura sirve para pasar argumentos a los hilos consumidores.
-total_profit y total_units son punteros a variables que almacenan el beneficio
-total y el número total de unidades vendidas, respectivamente.
+La siguiente estructura sirve para que los hilos consumidores lleven
+la cuenta del profit y la cantidad de productos en stock.
 */
-typedef struct {
-    int total_profit;
-    int total_units;
-} consumer_arg;
-
 typedef struct {
     int profit; // Profit acumulado por el consumidor
     int* stock; // Stock acumulado por producto
@@ -83,15 +81,6 @@ int main (int argc, const char * argv[]){
       printf("Failed to load operations from file '%s'\n", argv[1]);
       return -1;
   }
-  /*+++++++++++++++++++++++DEBUG++++++++++++++++++++++++++++*/
-  /* printf("Total operations loaded: %d\n", total_ops);
-  for (int i = 0; i < total_ops; i++) {
-      printf("Operation %d: Product %d, Type %s, Units %d\n",
-              i+1, ops[i].product_id,
-              ops[i].op_type == 0 ? "PURCHASE" : "SALE",
-              ops[i].units);
-  } */
-  /*++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
 
   /*
   El siguiente argumento representa el número de hilos productores.
@@ -129,9 +118,6 @@ int main (int argc, const char * argv[]){
   pthread_cond_init(&can_produce, NULL);
   pthread_cond_init(&can_consume, NULL);
 
-  pthread_t producers[num_producers], consumers[num_consumers];
-  consumer_result results[num_consumers]; // Array para almacenar resultados de consumidores
-
   /*Crear hilos productores*/
   for (int i = 0; i < num_producers; i++) {
       p_args[i].ops = ops;
@@ -141,15 +127,31 @@ int main (int argc, const char * argv[]){
       if (i == num_producers - 1)
           p_args[i].end_idx = total_ops - 1;
 
-      pthread_create(&producers[i], NULL, producer, (void*) &p_args[i]);
+      pthread_create(&producers[i], NULL, (void *) &producer, (void*) &p_args[i]);
   }
 
   /*Crear hilos consumidores*/
   for (int i = 0; i < num_consumers; i++) {
-      pthread_create(&consumers[i], NULL, consumer, NULL);
+      pthread_create(&consumers[i], NULL, (void *) &consumer, NULL);
   }
 
-  // TODO: join threads
+  /*Esperar a que los hilos productores terminen*/
+  for (int i = 0; i < num_producers; i++) {
+      pthread_join(producers[i], NULL);
+  }
+  producers_finished = true;  // Indicar que los productores han terminado
+  printf("flag EN MAIN: %d\n", producers_finished);
+
+  /*Esperar a que los hilos consumidores terminen y recoger resultados*/
+  consumer_result* result;
+  for (int i = 0; i < num_consumers; i++) {
+      pthread_join(consumers[i], (void*) &result);
+      profits += result->profit;
+      for (int j = 0; j < NUM_PRODUCTS; j++) {
+          product_stock[j] += result->stock[j];
+      }
+      free(result->stock);
+  }
 
   // Output
   printf("Total: %d euros\n", profits);
@@ -235,34 +237,72 @@ void* producer(void* arg) {
         pthread_cond_signal(&can_consume);
         pthread_mutex_unlock(&mutex);
     }
-
     pthread_exit(NULL);
 }
 
 void* consumer(void* arg) {
-    consumer_result* result = malloc(sizeof(consumer_result));
-    result->profit = 0;
-    result->stock = calloc(NUM_PRODUCTS, sizeof(int));
-
-    while (1) { // TODO: Add exit condition
-        pthread_mutex_lock(&mutex);
-        while (queue_empty(buffer)) {
-            pthread_cond_wait(&can_consume, &mutex);
-        }
-        element* task = queue_get(buffer);
-        pthread_cond_signal(&can_produce);
-        pthread_mutex_unlock(&mutex);
-
-        // Calculating profit and updating stock
-        if (task->op == 1) { // SALE
-            result->profit += task->units * 10;  // Example profit calculation
-            result->stock[task->product_id - 1] -= task->units;
-        } else { // PURCHASE
-            result->stock[task->product_id - 1] += task->units;
-        }
-
-        free(task);
+    consumer_result result;
+    /*
+    inicializamos todos los resultados a 0
+    */
+    result.profit = 0;
+    result.stock = malloc(sizeof(int) * NUM_PRODUCTS);
+    for(int i = 0; i < NUM_PRODUCTS; i++) {
+        result.stock[i] = 0;
     }
+    /*
+    Los hilos produtores han terminado de producir cuando la variable global
+    producers_finished es verdadera y la cola está vacía.
+    */
+    int caca = 0;
+    while (!producers_finished || !queue_empty(buffer)) { 
+      printf("flag: %d\n", producers_finished);
+      printf("caca: %d\n", caca);
+      caca++;
+      pthread_mutex_lock(&mutex);
+      while (queue_empty(buffer)) {
+          pthread_cond_wait(&can_consume, &mutex);
+      }
+      element* task = queue_get(buffer);
+      pthread_cond_signal(&can_produce);
+      pthread_mutex_unlock(&mutex);
 
-    pthread_exit(result);
+      // Procesar la operación
+      if (task->op == 0) {  // PURCHASE
+          if (task->product_id == 1) {
+              result.stock[0] += task->units;
+              result.profit -= task->units * 2;
+          } else if (task->product_id == 2) {
+              result.stock[1] += task->units;
+              result.profit -= task->units * 5;
+          } else if (task->product_id == 3) {
+              result.stock[2] += task->units;
+              result.profit -= task->units * 15;
+          } else if (task->product_id == 4) {
+              result.stock[3] += task->units;
+              result.profit -= task->units * 25;
+          } else if (task->product_id == 5) {
+              result.stock[4] += task->units;
+              result.profit -= task->units * 100;
+          }
+      } else if (task->op == 1) {  // SALE
+          if (task->product_id == 1) {
+              result.stock[0] -= task->units;
+              result.profit += task->units * 3;
+          } else if (task->product_id == 2) {
+              result.stock[1] -= task->units;
+              result.profit += task->units * 10;
+          } else if (task->product_id == 3) {
+              result.stock[2] -= task->units;
+              result.profit += task->units * 20;
+          } else if (task->product_id == 4) {
+              result.stock[3] -= task->units;
+              result.profit += task->units * 40;
+          } else if (task->product_id == 5) {
+              result.stock[4] -= task->units;
+              result.profit += task->units * 125;
+      }
+    }
+  }
+  pthread_exit(&result);
 }
