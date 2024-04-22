@@ -4,16 +4,20 @@
 #define HEADER_FILE
 
 
-struct element {
+typedef struct element {
   int product_id; //Product identifier
   int op;         //Operation
   int units;      //Product units
-};
+} element;
 
+// Definición de la estructura para la cola
 typedef struct queue {
-  // Define the struct yourself
-  int param1;
-}queue;
+  element* elements; // Array dinámico para almacenar los elementos
+  int capacity; // Capacidad máxima de la cola
+  int front; // Índice al primer elemento de la cola
+  int rear; // Índice al último elemento de la cola
+  int size; // Número de elementos en la cola
+} queue;
 
 queue* queue_init (int size);
 int queue_destroy (queue *q);
