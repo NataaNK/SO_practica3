@@ -85,10 +85,6 @@ int main(int argc, const char *argv[])
         printf("Failed to load operations from file '%s'\n", argv[1]);
         return -1;
     }
-    /* for (int i = 0; i < total_ops; i++)
-    {
-        printf("line=%d: Product ID: %d, Type: %d, Units: %d\n",i+1, ops[i].product_id, ops[i].op_type, ops[i].units);
-    } */
 
     /*
     El siguiente argumento representa el número de hilos productores.
@@ -282,11 +278,6 @@ void *producer(void *arg)
 void *consumer(int *iterations)
 {
     consumer_result *result = malloc(sizeof(consumer_result)); // Alocar memoria dinámicamente
-    if (result == NULL)
-    {
-        perror("Failed to allocate memory for result");
-        pthread_exit(NULL);
-    }
 
     result->profit = 0;
     result->stock = malloc(sizeof(int) * NUM_PRODUCTS);
@@ -310,11 +301,9 @@ void *consumer(int *iterations)
             pthread_cond_wait(&can_consume, &mutex);
         }
         element *task = queue_get(buffer);
-        pthread_cond_signal(&can_produce);
-        pthread_mutex_unlock(&mutex);
-
-        // Procesar la operación basada en task->op
         process_task(result, task);
+        pthread_cond_signal(&can_produce);
+        pthread_mutex_unlock(&mutex);        
     }
 
     pthread_exit(result);
@@ -325,7 +314,7 @@ void process_task(consumer_result *result, element *task)
     int price[] = {2, 5, 15, 25, 100};       // Prices for purchases
     int sale_price[] = {3, 10, 20, 40, 125}; // Prices for sales
 
-    int idx = task->product_id - 1; // Adjust index to be zero-based
+    int idx = task->product_id - 1;
 
     if (task->op == 0)
     { // PURCHASE
