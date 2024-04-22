@@ -12,7 +12,14 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
-operation* load_operations(const char* filename, int* total_ops);
+/*
+constantes y variables globales 
+*/
+#define NUM_PRODUCTS 5
+queue* buffer;  // Cola circular para las operaciones
+pthread_mutex_t mutex;  // Mutex para controlar el acceso a la cola
+pthread_cond_t can_produce;  // Condición para verificar si se puede producir (cola no llena)
+pthread_cond_t can_consume;  // Condición para verificar si se puede consumir (cola no vacía)
 
 /*
 La siguiente estructura sirva para almacenar cada operación.
@@ -23,9 +30,39 @@ typedef struct {
     int units;
 } operation;
 
+/*
+La siguiente estructura sirve para pasar argumentos a los hilos productores.
+start_idx y end_idx indican el rango de operaciones que debe procesar el hilo.
+Es decir, si hay 10 operaciones y 2 hilos productores, el primer hilo procesará
+las operaciones 0-4 y el segundo hilo procesará las operaciones 5-9.
+*/
+typedef struct {
+    operation* ops;
+    int start_idx;
+    int end_idx;
+} producer_arg;
 
-int main (int argc, const char * argv[])
-{
+/*
+La siguiente estructura sirve para pasar argumentos a los hilos consumidores.
+total_profit y total_units son punteros a variables que almacenan el beneficio
+total y el número total de unidades vendidas, respectivamente.
+*/
+typedef struct {
+    int total_profit;
+    int total_units;
+} consumer_arg;
+
+typedef struct {
+    int profit; // Profit acumulado por el consumidor
+    int* stock; // Stock acumulado por producto
+} consumer_result;
+
+/*Declaraciones*/
+operation* load_operations(const char* filename, int* total_ops);
+void* producer(void* arg);
+void* consumer(void* arg);
+
+int main (int argc, const char * argv[]){
   int profits = 0;
   int product_stock [5] = {0};
 
@@ -46,13 +83,15 @@ int main (int argc, const char * argv[])
       printf("Failed to load operations from file '%s'\n", argv[1]);
       return -1;
   }
-  printf("Total operations loaded: %d\n", total_ops);
-    for (int i = 0; i < total_ops; i++) {
-        printf("Operation %d: Product %d, Type %s, Units %d\n",
-               i+1, ops[i].product_id,
-               ops[i].op_type == 0 ? "PURCHASE" : "SALE",
-               ops[i].units);
-    }
+  /*+++++++++++++++++++++++DEBUG++++++++++++++++++++++++++++*/
+  /* printf("Total operations loaded: %d\n", total_ops);
+  for (int i = 0; i < total_ops; i++) {
+      printf("Operation %d: Product %d, Type %s, Units %d\n",
+              i+1, ops[i].product_id,
+              ops[i].op_type == 0 ? "PURCHASE" : "SALE",
+              ops[i].units);
+  } */
+  /*++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
 
   /*
   El siguiente argumento representa el número de hilos productores.
@@ -81,12 +120,36 @@ int main (int argc, const char * argv[])
     return -1;
   }
 
-  /*
-  Una vez comprobados los argumentos, pasaremos el fichero principal a memoria
-  para poder leerlo posteriormente de forma paralela.
-  */
+  pthread_t producers[num_producers], consumers[num_consumers];
+  producer_arg p_args[num_producers];
+  int ops_per_prod_thread = total_ops / num_producers;
 
+  buffer = queue_init(buffer_size);
+  pthread_mutex_init(&mutex, NULL);
+  pthread_cond_init(&can_produce, NULL);
+  pthread_cond_init(&can_consume, NULL);
 
+  pthread_t producers[num_producers], consumers[num_consumers];
+  consumer_result results[num_consumers]; // Array para almacenar resultados de consumidores
+
+  /*Crear hilos productores*/
+  for (int i = 0; i < num_producers; i++) {
+      p_args[i].ops = ops;
+      p_args[i].start_idx = i * ops_per_prod_thread;
+      p_args[i].end_idx = (i + 1) * ops_per_prod_thread - 1;
+      /*El último hilo tendrá las operaciones restantes*/
+      if (i == num_producers - 1)
+          p_args[i].end_idx = total_ops - 1;
+
+      pthread_create(&producers[i], NULL, producer, (void*) &p_args[i]);
+  }
+
+  /*Crear hilos consumidores*/
+  for (int i = 0; i < num_consumers; i++) {
+      pthread_create(&consumers[i], NULL, consumer, NULL);
+  }
+
+  // TODO: join threads
 
   // Output
   printf("Total: %d euros\n", profits);
@@ -100,6 +163,7 @@ int main (int argc, const char * argv[])
   free(ops); 
   return 0;
 }
+
 operation* load_operations(const char* filename, int* total_ops) {
     int fd = open(filename, O_RDONLY);
     if (fd < 0) {
@@ -154,4 +218,51 @@ operation* load_operations(const char* filename, int* total_ops) {
     return operations;
 }
 
+void* producer(void* arg) {
+    producer_arg* p_arg = (producer_arg*) arg;
 
+    for (int i = p_arg->start_idx; i <= p_arg->end_idx; i++) { 
+        element *elem = malloc(sizeof(element));
+        elem->product_id = p_arg->ops[i].product_id;
+        elem->op = p_arg->ops[i].op_type;  // 0 for PURCHASE, 1 for SALE
+        elem->units = p_arg->ops[i].units;
+
+        pthread_mutex_lock(&mutex);
+        while (queue_full(buffer)) {
+            pthread_cond_wait(&can_produce, &mutex);
+        }
+        queue_put(buffer, elem);
+        pthread_cond_signal(&can_consume);
+        pthread_mutex_unlock(&mutex);
+    }
+
+    pthread_exit(NULL);
+}
+
+void* consumer(void* arg) {
+    consumer_result* result = malloc(sizeof(consumer_result));
+    result->profit = 0;
+    result->stock = calloc(NUM_PRODUCTS, sizeof(int));
+
+    while (1) { // TODO: Add exit condition
+        pthread_mutex_lock(&mutex);
+        while (queue_empty(buffer)) {
+            pthread_cond_wait(&can_consume, &mutex);
+        }
+        element* task = queue_get(buffer);
+        pthread_cond_signal(&can_produce);
+        pthread_mutex_unlock(&mutex);
+
+        // Calculating profit and updating stock
+        if (task->op == 1) { // SALE
+            result->profit += task->units * 10;  // Example profit calculation
+            result->stock[task->product_id - 1] -= task->units;
+        } else { // PURCHASE
+            result->stock[task->product_id - 1] += task->units;
+        }
+
+        free(task);
+    }
+
+    pthread_exit(result);
+}

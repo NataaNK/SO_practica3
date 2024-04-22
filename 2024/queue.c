@@ -32,16 +32,15 @@ queue* queue_init(int size) {
   return q;
 }
 
-
-// To Enqueue an element
-element* queue_get(queue *q) {
-  if (q->size == 0) {
-    return NULL; // La cola está vacía
+// Para enconlar un elemento
+int queue_put(queue *q, element* elem) {
+  if (q->size == q->capacity) {
+    return -1; // La cola está llena
   }
-  element* elem = &q->elements[q->front];
-  q->front = (q->front + 1) % q->capacity;
-  q->size--;
-  return elem;
+  q->rear = (q->rear + 1) % q->capacity;
+  q->elements[q->rear] = *elem;
+  q->size++;
+  return 0;
 }
 
 // Para desencolar un elemento.
