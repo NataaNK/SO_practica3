@@ -1,4 +1,10 @@
-// SSOO-P3 23/24
+/* 
+SSOO-P3 23/24 
+
+    - ALberto Penas Díaz        - 100471939
+    - Natalia Rodríguez Navarro - 100471976
+
+*/
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,10 +23,10 @@
 constantes y variables globales
 */
 #define NUM_PRODUCTS 5
-queue *buffer;              // Cola circular para las operaciones
-pthread_mutex_t mutex;      // Mutex para controlar el acceso a la cola
-pthread_cond_t can_produce; // Condición para verificar si se puede producir (cola no llena)
-pthread_cond_t can_consume; // Condición para verificar si se puede consumir (cola no vacía)
+queue *buffer;
+pthread_mutex_t mutex;
+pthread_cond_t can_produce;
+pthread_cond_t can_consume;
 
 /*
 La siguiente estructura sirva para almacenar cada operación.
@@ -28,7 +34,7 @@ La siguiente estructura sirva para almacenar cada operación.
 typedef struct
 {
     int product_id;
-    int op_type; // 0 for PURCHASE, 1 for SALE
+    int op_type; /*0 for PURCHASE, 1 for SALE*/
     int units;
 } operation;
 
@@ -51,8 +57,8 @@ la cuenta del profit y la cantidad de productos en stock.
 */
 typedef struct
 {
-    int profit; // Profit acumulado por el consumidor
-    int *stock; // Stock acumulado por producto
+    int profit;
+    int *stock;
 } consumer_result;
 
 /*Declaraciones*/
@@ -176,6 +182,7 @@ int main(int argc, const char *argv[])
             product_stock[j] += result->stock[j];
         }
 
+        free(results[i]->stock);
         free(result);
     }
 
@@ -189,6 +196,10 @@ int main(int argc, const char *argv[])
     printf("  Product 5: %d\n", product_stock[4]);
 
     free(ops);
+    queue_destroy(buffer);
+    pthread_mutex_destroy(&mutex);
+    pthread_cond_destroy(&can_produce);
+    pthread_cond_destroy(&can_consume);
     return 0;
 }
 
@@ -267,6 +278,10 @@ void *producer(void *arg)
             pthread_cond_wait(&can_produce, &mutex);
         }
         queue_put(buffer, elem);
+        /*
+        Aquí podemos liberar el elemento, ya que la cola ha hecho una copia de él.
+        */
+        free(elem);
         pthread_cond_signal(&can_consume);
         pthread_mutex_unlock(&mutex);
     }
@@ -275,16 +290,10 @@ void *producer(void *arg)
 
 void *consumer(int *iterations)
 {
-    consumer_result *result = malloc(sizeof(consumer_result)); // Alocar memoria dinámicamente
+    consumer_result *result = malloc(sizeof(consumer_result));
 
     result->profit = 0;
     result->stock = malloc(sizeof(int) * NUM_PRODUCTS);
-    if (result->stock == NULL)
-    {
-        perror("Failed to allocate memory for stock");
-        free(result); // Liberar memoria asignada a result antes del error
-        pthread_exit(NULL);
-    }
 
     for (int i = 0; i < NUM_PRODUCTS; i++)
     {
@@ -300,6 +309,7 @@ void *consumer(int *iterations)
         }
         element *task = queue_get(buffer);
         process_task(result, task);
+        free(task);
         pthread_cond_signal(&can_produce);
         pthread_mutex_unlock(&mutex);
     }

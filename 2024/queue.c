@@ -48,7 +48,12 @@ element* queue_get(queue *q) {
   if (q->size == 0) {
     return NULL; // La cola está vacía
   }
-  element* elem = &q->elements[q->front];
+  /*Para que no haya pérdidas de memoria,
+  devolveremos no el elemento como tal,
+  si no una COPIA con su respectivo malloc
+  del elemento*/
+  element *elem = (element *)malloc(sizeof(element));
+  *elem = q->elements[q->front];
   q->front = (q->front + 1) % q->capacity;
   q->size--;
   return elem;
