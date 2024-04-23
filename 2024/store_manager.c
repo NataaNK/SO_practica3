@@ -144,7 +144,7 @@ int main(int argc, const char *argv[])
     for (int i = 0; i < num_consumers; i++)
     {
         if (i == num_consumers - 1 && ops_last_const_thread != 0)
-        {   
+        {
             ops_last_const_thread = ops_per_cons_thread + ops_last_const_thread;
             pthread_create(&consumers[i], NULL, (void *)&consumer, &ops_last_const_thread);
         }
@@ -192,15 +192,18 @@ int main(int argc, const char *argv[])
     return 0;
 }
 
-operation *load_operations(const char *filename, int *total_ops) {
+operation *load_operations(const char *filename, int *total_ops)
+{
     FILE *fp = fopen(filename, "r");
-    if (!fp) {
+    if (!fp)
+    {
         perror("Error opening file");
         return NULL;
     }
 
     int max_operations;
-    if (fscanf(fp, "%d\n", &max_operations) != 1) {
+    if (fscanf(fp, "%d\n", &max_operations) != 1)
+    {
         fprintf(stderr, "Failed to read the number of operations.\n");
         fclose(fp);
         return NULL;
@@ -208,20 +211,23 @@ operation *load_operations(const char *filename, int *total_ops) {
 
     operation *operations = malloc(max_operations * sizeof(operation));
 
-    char line[256];  // Buffer to store file contents temporarily, one line at a time
+    char line[256]; // Buffer to store file contents temporarily, one line at a time
     int index = 0;
     int product_id, units;
     char type[10];
 
-    while (fgets(line, sizeof(line), fp) && index < max_operations) {
-        if (sscanf(line, "%d %s %d", &product_id, type, &units) == 3) {
+    while (fgets(line, sizeof(line), fp) && index < max_operations)
+    {
+        if (sscanf(line, "%d %s %d", &product_id, type, &units) == 3)
+        {
             operations[index].product_id = product_id;
             operations[index].units = units;
             if (strcmp(type, "PURCHASE") == 0)
                 operations[index].op_type = 0;
             else if (strcmp(type, "SALE") == 0)
                 operations[index].op_type = 1;
-            else {
+            else
+            {
                 fprintf(stderr, "Unknown operation type '%s' at index %d\n", type, index);
                 free(operations);
                 fclose(fp);
@@ -231,7 +237,8 @@ operation *load_operations(const char *filename, int *total_ops) {
         }
     }
 
-    if (index != max_operations) {
+    if (index != max_operations)
+    {
         fprintf(stderr, "File contains fewer operations (%d) than specified (%d).\n", index, max_operations);
         free(operations);
         fclose(fp);
@@ -294,7 +301,7 @@ void *consumer(int *iterations)
         element *task = queue_get(buffer);
         process_task(result, task);
         pthread_cond_signal(&can_produce);
-        pthread_mutex_unlock(&mutex);        
+        pthread_mutex_unlock(&mutex);
     }
 
     pthread_exit(result);
