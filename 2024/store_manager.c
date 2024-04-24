@@ -185,8 +185,18 @@ int main(int argc, const char *argv[])
         free(results[i]->stock);
         free(result);
     }
+    /*
+    Comprobarmos que el stock no sea negativo de ninguno de los productos.
+    */
+    for (int i = 0; i < NUM_PRODUCTS; i++)
+    {
+        if (product_stock[i] < 0)
+        {
+            printf("[ERROR] El stock del producto %d no puede ser negativo\n", i + 1);
+            return -1;
+        }
+    }
 
-    // Output
     printf("Total: %d euros\n", profits);
     printf("Stock:\n");
     printf("  Product 1: %d\n", product_stock[0]);
@@ -222,7 +232,7 @@ operation *load_operations(const char *filename, int *total_ops)
 
     operation *operations = malloc(max_operations * sizeof(operation));
 
-    char line[256]; // Buffer to store file contents temporarily, one line at a time
+    char line[256];
     int index = 0;
     int product_id, units;
     char type[10];
@@ -239,7 +249,7 @@ operation *load_operations(const char *filename, int *total_ops)
                 operations[index].op_type = 1;
             else
             {
-                fprintf(stderr, "Unknown operation type '%s' at index %d\n", type, index);
+                printf("Unknown operation type '%s' at index %d\n", type, index);
                 free(operations);
                 fclose(fp);
                 return NULL;
@@ -250,7 +260,7 @@ operation *load_operations(const char *filename, int *total_ops)
 
     if (index != max_operations)
     {
-        fprintf(stderr, "File contains fewer operations (%d) than specified (%d).\n", index, max_operations);
+        printf("File contains fewer operations (%d) than specified (%d).\n", index, max_operations);
         free(operations);
         fclose(fp);
         return NULL;
@@ -269,7 +279,7 @@ void *producer(void *arg)
     {
         element *elem = malloc(sizeof(element));
         elem->product_id = p_arg->ops[i].product_id;
-        elem->op = p_arg->ops[i].op_type; // 0 for PURCHASE, 1 for SALE
+        elem->op = p_arg->ops[i].op_type;
         elem->units = p_arg->ops[i].units;
 
         pthread_mutex_lock(&mutex);
@@ -319,18 +329,18 @@ void *consumer(int *iterations)
 
 void process_task(consumer_result *result, element *task)
 {
-    int price[] = {2, 5, 15, 25, 100};       // Prices for purchases
-    int sale_price[] = {3, 10, 20, 40, 125}; // Prices for sales
+    int price[] = {2, 5, 15, 25, 100};
+    int sale_price[] = {3, 10, 20, 40, 125};
 
     int idx = task->product_id - 1;
 
     if (task->op == 0)
-    { // PURCHASE
+    { /*PURCHASE*/
         result->stock[idx] += task->units;
         result->profit -= task->units * price[idx];
     }
     else if (task->op == 1)
-    { // SALE
+    { /*SALE*/
         result->stock[idx] -= task->units;
         result->profit += task->units * sale_price[idx];
     }
