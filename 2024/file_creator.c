@@ -32,12 +32,17 @@ void *perform_operations(void *threadarg)
     for (int i = 0; i < num_ops; i++)
     {
         int product_id = rand() % 5;
-        int operation_type = rand() % 100 < 35 ? 0 : 1;
+        /*
+        Siempre se tratará de vender un producto. Si no hay stock suficiente,
+        se realizará una compra de 10 veces la cantidad que se intentó vender.
+        */
+        int operation_type = 1;
         int units = rand() % 100 + 1;
 
         if (operation_type == 1 && local_stock[product_id] < units)
         {
-            continue; // Ignora la operación de venta si no hay suficiente stock
+            operation_type = 0;
+            units *= 10;
         }
 
         // Actualizar el stock y la ganancia local
